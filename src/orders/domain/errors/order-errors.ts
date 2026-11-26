@@ -49,6 +49,13 @@ export class InvalidShareQuantityError extends Error {
   }
 }
 
+export class InvalidCashMovementError extends Error {
+  constructor(message = 'Cash movement state is invalid.') {
+    super(message);
+    this.name = 'InvalidCashMovementError';
+  }
+}
+
 export class InvalidOrderIdError extends Error {
   constructor(message = 'Order id must be a UUID.') {
     super(message);

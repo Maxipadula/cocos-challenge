@@ -2,9 +2,11 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { IdempotencyStore } from '#shared/application/idempotency-store.js';
 import { UnitOfWork } from '#shared/application/unit-of-work.js';
 import { UuidGenerator } from '#shared/application/uuid-generator.js';
 import { PrismaClientProvider } from '#shared/infrastructure/prisma/prisma-client.provider.js';
+import { PrismaIdempotencyStore } from '#shared/infrastructure/prisma/prisma-idempotency-store.js';
 import { PrismaUnitOfWork } from '#shared/infrastructure/prisma/prisma-unit-of-work.js';
 import { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
 import { NodeUuidGenerator } from '#shared/infrastructure/uuid/node-uuid-generator.js';
@@ -41,6 +43,7 @@ describe('application bootstrap', () => {
     expect(app.get(UnitOfWork)).toBeInstanceOf(PrismaUnitOfWork);
     expect(app.get(PrismaClientProvider)).toBeInstanceOf(PrismaClientProvider);
     expect(app.get(UuidGenerator)).toBeInstanceOf(NodeUuidGenerator);
+    expect(app.get(IdempotencyStore)).toBeInstanceOf(PrismaIdempotencyStore);
     expect(app.get(AccountLock)).toBeInstanceOf(PrismaAccountLock);
   });
 });

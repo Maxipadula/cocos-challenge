@@ -2,11 +2,25 @@ import type { Uuid } from '#shared/domain/value-objects/uuid.js';
 
 export type InstrumentInfo = {
   readonly id: Uuid;
+  readonly ticker: string;
+  readonly name: string;
   readonly type: string;
+};
+
+export type MarketDataQuote = {
+  readonly instrumentId: Uuid;
+  readonly close: string;
+  readonly previousClose: string;
+  readonly observedAt: string;
 };
 
 export abstract class InstrumentQueries {
   abstract findById(id: Uuid): Promise<InstrumentInfo | null>;
 
-  abstract latestClose(id: Uuid): Promise<string | null>;
+  abstract search(
+    term: string,
+    limit?: number,
+  ): Promise<readonly InstrumentInfo[]>;
+
+  abstract latestMarketData(id: Uuid): Promise<MarketDataQuote | null>;
 }

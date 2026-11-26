@@ -15,6 +15,7 @@ import type { Uuid } from '#shared/domain/value-objects/uuid.js';
 import {
   type InstrumentInfo,
   InstrumentQueries,
+  type MarketDataQuote,
 } from '#instruments/application/instrument-queries.js';
 import { AccountNotFoundError } from '#orders/application/errors/account-not-found.error.js';
 import { AccountLock } from '#orders/application/ports/account-lock.js';
@@ -155,7 +156,12 @@ class MemoryOrders extends OrderRepository {
 }
 
 class MemoryInstruments extends InstrumentQueries {
-  instrument: InstrumentInfo | null = { id: stock, type: 'ACCIONES' };
+  instrument: InstrumentInfo | null = {
+    id: stock,
+    ticker: 'GGAL',
+    name: 'Grupo Financiero Galicia',
+    type: 'ACCIONES',
+  };
   close: string | null = '10.00';
 
   constructor(private readonly events: string[]) {
@@ -167,9 +173,25 @@ class MemoryInstruments extends InstrumentQueries {
     return this.instrument;
   }
 
-  override async latestClose(): Promise<string | null> {
+  override async search(): Promise<readonly InstrumentInfo[]> {
+    return [];
+  }
+
+  override async latestMarketData(
+    id: InstrumentInfo['id'],
+  ): Promise<MarketDataQuote | null> {
     this.events.push('close');
-    return this.close;
+
+    if (!this.close) {
+      return null;
+    }
+
+    return {
+      instrumentId: id,
+      close: this.close,
+      previousClose: '0',
+      observedAt: '2026-01-15T00:00:00.000Z',
+    };
   }
 }
 
@@ -336,7 +358,12 @@ describe('SubmitTradeOrder', () => {
 
   it('rejects a currency instrument without reading market data', async () => {
     const { events, instruments, idempotency, useCase } = harness();
-    instruments.instrument = { id: stock, type: 'MONEDA' };
+    instruments.instrument = {
+      id: stock,
+      ticker: 'ARS',
+      name: 'Peso argentino',
+      type: 'MONEDA',
+    };
 
     await expect(useCase.execute(marketCommand())).rejects.toBeInstanceOf(
       InstrumentNotTradableError,

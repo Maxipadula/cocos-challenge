@@ -142,13 +142,13 @@ export class SubmitTradeOrder {
   }
 
   private async requireClose(instrumentId: InstrumentId): Promise<UnitPrice> {
-    const close = await this.instruments.latestClose(instrumentId);
+    const quote = await this.instruments.latestMarketData(instrumentId);
 
-    if (!close) {
+    if (!quote) {
       throw new MarketPriceUnavailableError();
     }
 
-    return UnitPrice.parse(close);
+    return UnitPrice.parse(quote.close);
   }
 
   private async decideAndPersist(

@@ -36,7 +36,7 @@ test/functional
 | `shared`      | Activo            | Cliente de Prisma, transacción interactiva y el cliente que deben usar los repositorios |
 | `orders`      | Registrado, vacío | Órdenes, cancelación y movimientos de efectivo                                          |
 | `portfolio`   | Registrado, vacío | Valorización de la cuenta                                                               |
-| `instruments` | Registrado, vacío | Búsqueda de instrumentos y lectura de market data                                       |
+| `instruments` | Lectura           | Búsqueda de instrumentos y última cotización                                            |
 
 Los módulos vacíos existen para fijar la frontera. No tienen entidades, repositorios ni endpoints.
 
@@ -147,7 +147,23 @@ No se usa `prisma db push`. La validación contra PostgreSQL queda para cuando e
 
 ## Persistencia
 
-El schema está en `prisma/schema.prisma`. La migración inicial está en `prisma/migrations/20261126054100_init`. No fue aplicada contra una base: no hay `DATABASE_URL` de trabajo. Los repositorios y los adaptadores todavía no existen.
+El schema está en `prisma/schema.prisma`. La migración inicial está en `prisma/migrations/20261126054100_init`. No fue aplicada contra una base. Siguen pendientes el repositorio de órdenes y el seed.
+
+`PrismaIdempotencyStore` lee con `getClient()` y escribe con `getTransactionClient()`. El id lo genera `UuidGenerator`. `createdAt` y `completedAt` se guardan juntos, porque la fila nace completa. Contra PostgreSQL todavía falta probar la inserción real, la lectura del JSON, el único `(user_id, idempotency_key)`, el rollback si falla la orden y el rollback si falla el guardado idempotente.
+
+`PrismaOrderRepository` lee y escribe con `getTransactionClient()`. `CashMovement.reconstitute` recupera el estado guardado sin volver a calcular el disponible. Un movimiento de efectivo tiene que apuntar al instrumento `ARS` de tipo `MONEDA`. Una compra o venta no puede apuntar a `MONEDA`. `findTradeForUpdate` bloquea solo filas `BUY` o `SELL` con `FOR UPDATE OF orders`. Contra PostgreSQL todavía falta probar cada variante de inserción, la reconstitución, los `CHECK`, las foreign keys, el bloqueo de la orden, la cancelación con rollback y la precisión `NUMERIC`.
+
+## Instruments
+
+`instruments` es un módulo de lectura. No simula el mercado ni calcula rendimiento. No tiene entidades ni value objects: el término de búsqueda lo valida `SearchInstruments` antes de consultar. No hay entidad de instrumento ni de cotización.
+
+`InstrumentQueries` es el contrato que consumen `orders` y, más adelante, `portfolio`. Habla el `Uuid` compartido y devuelve strings. Una orden de mercado usa `latestMarketData` y se queda con `close`. El portfolio usará también `previousClose`. Si ese valor es cero, el rendimiento lo define portfolio y no este módulo.
+
+La búsqueda compara ticker o nombre en minúsculas, excluye `MONEDA`, pone primero el ticker exacto y después ordena por ticker e id. El límite va de 1 a 50, con 20 por defecto. Los comodines `%`, `_` y `\` se escapan en el adaptador. No hay `pg_trgm`. Los decimales salen de `Decimal.toFixed()` en notación plana, sin `toNumber()`. `observedAt` se entrega en UTC.
+
+ARS es el instrumento sembrado con ticker `ARS` y tipo `MONEDA`. La búsqueda no lo devuelve. El alta lo rechaza como no operable. Los movimientos de efectivo, cuando exista su adaptador, tienen que apuntar a esa fila.
+
+Contra PostgreSQL todavía falta probar la búsqueda real sin distinguir mayúsculas, el escape de comodines, el orden de la coincidencia exacta, la exclusión de `MONEDA`, la cotización más reciente, el `CHECK` de precios y la precisión `NUMERIC`.
 
 ```text
 users
@@ -190,26 +206,26 @@ Todos los `id` son `UUID` sin default y sin secuencia. Los genera `UuidGenerator
 
 `NUMERIC(38, 18)` guarda precios, cotizaciones y `orders.size`. Son 18 decimales, el máximo de `Money`, y 20 dígitos enteros, el tope de `Money.parse` y de `ShareQuantity`. El efectivo y las acciones comparten `size`: las acciones tienen que ser enteras por `orders_shape_chk`.
 
-Ese `CHECK` cierra las combinaciones de side, type, status, size, price y rejection reason. `market_data_prices_chk` exige OHLC positivo, `previous_close >= 0` y que high y low contengan a open y close. Que un movimiento de efectivo apunte al instrumento ARS no está en SQL: lo va a exigir el adaptador.
+Ese `CHECK` cierra las combinaciones de side, type, status, size, price y rejection reason. `market_data_prices_chk` exige OHLC positivo, `previous_close >= 0` y que high y low contengan a open y close. Que un movimiento de efectivo apunte al instrumento ARS no está en SQL: lo exige el adaptador.
 
 Índices y la consulta que los usa:
 
-| Índice | Consulta |
-| --- | --- |
-| `users.email` único | Identidad por email. |
-| `accounts.user_id` único | `SELECT id FROM accounts WHERE user_id = $1 FOR UPDATE`. |
-| `accounts.account_number` único | Número de cuenta. |
-| `instruments.ticker` único | Búsqueda exacta por ticker. |
-| `orders (account_id, instrument_id)` | Órdenes de una cuenta y, dentro, las de un instrumento. El prefijo cubre el listado por cuenta. |
-| `market_data (instrument_id, observed_at)` único | Último close de un instrumento, recorriendo la fecha al revés. |
-| `idempotency_records (user_id, idempotency_key)` único | Replay y conflicto. `operation` no forma parte de la clave. |
+| Índice                                                 | Consulta                                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `users.email` único                                    | Identidad por email.                                                                            |
+| `accounts.user_id` único                               | `SELECT id FROM accounts WHERE user_id = $1 FOR UPDATE`.                                        |
+| `accounts.account_number` único                        | Número de cuenta.                                                                               |
+| `instruments.ticker` único                             | Búsqueda exacta por ticker.                                                                     |
+| `orders (account_id, instrument_id)`                   | Órdenes de una cuenta y, dentro, las de un instrumento. El prefijo cubre el listado por cuenta. |
+| `market_data (instrument_id, observed_at)` único       | Último close de un instrumento, recorriendo la fecha al revés.                                  |
+| `idempotency_records (user_id, idempotency_key)` único | Replay y conflicto. `operation` no forma parte de la clave.                                     |
 
 La primary key de `orders` alcanza para buscar una orden por id y filtrar `account_id` sobre esa fila. No hay otro índice encima.
 
 ## Decisiones de diseño pendientes
 
 - Adaptador del bloqueo de cuenta con `SELECT … FOR UPDATE`.
-- Repositorios de órdenes, instrumentos, cotizaciones e idempotencia.
+- Tests de integración del repositorio de órdenes contra PostgreSQL: cada variante de inserción, reconstitución de todos los estados, `CHECK`, foreign keys, `SELECT … FOR UPDATE`, cancelación con rollback y precisión `NUMERIC`.
 - Seed de cada usuario con su cuenta y del instrumento ARS.
 - Portfolio, búsqueda de instrumentos y movimientos de efectivo como casos de uso.
 - Endpoints y códigos HTTP, incluido el status de una orden `REJECTED`.

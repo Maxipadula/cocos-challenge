@@ -5,6 +5,7 @@ import {
 } from '#shared/domain/value-objects/money.js';
 
 import {
+  InvalidCashMovementError,
   InvalidOrderTimestampError,
   NonPositiveAmountError,
 } from '../errors/order-errors.js';
@@ -70,6 +71,32 @@ export class CashMovement {
     );
   }
 
+  static reconstitute(
+    props: CashMovementProps & {
+      readonly side: CashSide;
+      readonly status: CashStatus;
+      readonly rejectionReason: RejectionReason | null;
+    },
+  ): CashMovement {
+    assertPositiveAmount(props.amount);
+    assertPersistableAmount(props.amount);
+
+    if (!isStoredCashState(props.side, props.status, props.rejectionReason)) {
+      throw new InvalidCashMovementError();
+    }
+
+    return new CashMovement(
+      props.id,
+      props.accountId,
+      props.instrumentId,
+      props.side,
+      props.amount,
+      copyDate(props.placedAt),
+      props.status,
+      props.rejectionReason,
+    );
+  }
+
   get cashStatus(): CashStatus {
     return this.status;
   }
@@ -89,6 +116,22 @@ export class CashMovement {
   committedCash(): Money {
     return Money.zero(this.amount.scale);
   }
+}
+
+function isStoredCashState(
+  side: CashSide,
+  status: CashStatus,
+  reason: RejectionReason | null,
+): boolean {
+  if (side === 'CASH_IN') {
+    return status === 'FILLED' && reason === null;
+  }
+
+  if (status === 'FILLED') {
+    return reason === null;
+  }
+
+  return status === 'REJECTED' && reason === 'INSUFFICIENT_CASH';
 }
 
 function assertPositiveAmount(amount: Money): void {

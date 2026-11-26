@@ -4,7 +4,10 @@ import { InvalidMoneyError } from '#shared/domain/errors/value-object-errors.js'
 import { Money } from '#shared/domain/value-objects/money.js';
 
 import { CashMovement } from '#orders/domain/entities/cash-movement.js';
-import { NonPositiveAmountError } from '#orders/domain/errors/order-errors.js';
+import {
+  InvalidCashMovementError,
+  NonPositiveAmountError,
+} from '#orders/domain/errors/order-errors.js';
 import { availableCash } from '#orders/domain/services/availability.js';
 
 import { identity, peso } from '../order-fixture.js';
@@ -102,5 +105,49 @@ describe('CashMovement', () => {
         availableCash: overflow,
       }),
     ).toThrow(InvalidMoneyError);
+  });
+
+  it('reconstitutes a stored cash movement without recalculating availability', () => {
+    const filledOut = CashMovement.reconstitute({
+      ...cash(2, '40.50'),
+      side: 'CASH_OUT',
+      status: 'FILLED',
+      rejectionReason: null,
+    });
+    const rejectedOut = CashMovement.reconstitute({
+      ...cash(3, '80.00'),
+      side: 'CASH_OUT',
+      status: 'REJECTED',
+      rejectionReason: 'INSUFFICIENT_CASH',
+    });
+    const filledIn = CashMovement.reconstitute({
+      ...cash(1, '1500.00'),
+      side: 'CASH_IN',
+      status: 'FILLED',
+      rejectionReason: null,
+    });
+
+    expect(filledOut.cashStatus).toBe('FILLED');
+    expect(filledOut.settledCashDelta().toDecimalString()).toBe('-40.50');
+    expect(rejectedOut.cashStatus).toBe('REJECTED');
+    expect(rejectedOut.rejectionReason).toBe('INSUFFICIENT_CASH');
+    expect(rejectedOut.settledCashDelta().isZero()).toBe(true);
+    expect(filledIn.settledCashDelta().toDecimalString()).toBe('1500.00');
+    expect(() =>
+      CashMovement.reconstitute({
+        ...cash(4, '10.00'),
+        side: 'CASH_IN',
+        status: 'REJECTED',
+        rejectionReason: 'INSUFFICIENT_CASH',
+      }),
+    ).toThrow(InvalidCashMovementError);
+    expect(() =>
+      CashMovement.reconstitute({
+        ...cash(5, '10.00'),
+        side: 'CASH_OUT',
+        status: 'REJECTED',
+        rejectionReason: null,
+      }),
+    ).toThrow(InvalidCashMovementError);
   });
 });
