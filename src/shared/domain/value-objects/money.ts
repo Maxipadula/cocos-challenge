@@ -11,24 +11,17 @@ export class Money {
   ) {}
 
   static parse(value: string): Money {
-    const match = DECIMAL_PATTERN.exec(value.trim());
+    const parsed = Money.readDecimal(value);
 
-    if (!match) {
+    if (parsed.integerDigits > MAX_MONEY_INTEGER_DIGITS) {
       throw new InvalidMoneyError();
     }
 
-    const fraction = match[3] ?? '';
-    const integerDigits = match[2].replace(/^0+/, '');
+    return parsed.money;
+  }
 
-    if (
-      fraction.length > MAX_SCALE ||
-      integerDigits.length > MAX_MONEY_INTEGER_DIGITS
-    ) {
-      throw new InvalidMoneyError();
-    }
-
-    const sign = match[1] === '-' ? -1n : 1n;
-    return new Money(sign * BigInt(match[2] + fraction), fraction.length);
+  static fromCalculation(value: string): Money {
+    return Money.readDecimal(value).money;
   }
 
   static zero(scale = 0): Money {
@@ -128,6 +121,31 @@ export class Money {
     const fraction = padded.slice(-this.scale);
     const body = `${whole}.${fraction}`;
     return negative ? `-${body}` : body;
+  }
+
+  private static readDecimal(value: string): {
+    money: Money;
+    integerDigits: number;
+  } {
+    const match = DECIMAL_PATTERN.exec(value.trim());
+
+    if (!match) {
+      throw new InvalidMoneyError();
+    }
+
+    const fraction = match[3] ?? '';
+    const integerDigits = match[2].replace(/^0+/, '').length;
+
+    if (fraction.length > MAX_SCALE) {
+      throw new InvalidMoneyError();
+    }
+
+    const sign = match[1] === '-' ? -1n : 1n;
+
+    return {
+      money: new Money(sign * BigInt(match[2] + fraction), fraction.length),
+      integerDigits,
+    };
   }
 
   private static align(

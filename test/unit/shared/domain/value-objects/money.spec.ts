@@ -80,4 +80,24 @@ describe('Money', () => {
     expect(sum.toDecimalString()).toBe(`1${'0'.repeat(20)}`);
     expect(sum.integerDigitCount()).toBe(21);
   });
+
+  it('rebuilds an aggregate larger than the storage limit', () => {
+    const sum = Money.parse('9'.repeat(20)).add(Money.parse('9'.repeat(20)));
+    const restored = Money.fromCalculation(sum.toDecimalString());
+    const settled = Money.fromCalculation(`-${'9'.repeat(21)}`);
+    const committed = Money.fromCalculation('9'.repeat(21));
+    const available = settled.subtract(committed);
+
+    expect(restored.toDecimalString()).toBe(sum.toDecimalString());
+    expect(restored.equals(sum)).toBe(true);
+    expect(available.toDecimalString()).toBe(
+      (-(10n ** 21n - 1n) * 2n).toString(),
+    );
+    expect(available.isNegative()).toBe(true);
+    expect(() => Money.parse(sum.toDecimalString())).toThrow(InvalidMoneyError);
+    expect(() => Money.fromCalculation(`0.${'1'.repeat(19)}`)).toThrow(
+      InvalidMoneyError,
+    );
+    expect(() => Money.fromCalculation('1e21')).toThrow(InvalidMoneyError);
+  });
 });

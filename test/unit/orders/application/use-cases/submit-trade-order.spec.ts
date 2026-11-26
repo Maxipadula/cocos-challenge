@@ -177,6 +177,14 @@ class MemoryInstruments extends InstrumentQueries {
     return [];
   }
 
+  override async findByIds(): Promise<readonly InstrumentInfo[]> {
+    return [];
+  }
+
+  override async latestMarketDataFor(): Promise<readonly MarketDataQuote[]> {
+    return [];
+  }
+
   override async latestMarketData(
     id: InstrumentInfo['id'],
   ): Promise<MarketDataQuote | null> {

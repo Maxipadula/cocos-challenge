@@ -159,4 +159,63 @@ describe('PrismaInstrumentQueries', () => {
     ).toBe(true);
     expect(getTransactionClient).not.toHaveBeenCalled();
   });
+
+  it('does not query when a batch is empty', async () => {
+    const { queryRaw, queries } = createHarness();
+
+    await expect(queries.findByIds([])).resolves.toEqual([]);
+    await expect(queries.latestMarketDataFor([])).resolves.toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('loads instruments and their latest quotes in one query each', async () => {
+    const first = uuid('00000000-0000-4000-8000-000000000014');
+    const second = uuid('00000000-0000-4000-8000-000000000015');
+    const { queryRaw, getTransactionClient, queries } = createHarness();
+    queryRaw
+      .mockResolvedValueOnce([
+        { id: first, ticker: 'GGAL', name: 'Grupo Galicia', type: 'ACCIONES' },
+        { id: second, ticker: 'YPF', name: 'YPF', type: 'ACCIONES' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          instrument_id: first,
+          close: new Prisma.Decimal('10.50'),
+          previous_close: new Prisma.Decimal('10.00'),
+          observed_at: new Date('2026-01-16T00:00:00.000Z'),
+        },
+      ]);
+
+    await expect(queries.findByIds([first, second])).resolves.toEqual([
+      { id: first, ticker: 'GGAL', name: 'Grupo Galicia', type: 'ACCIONES' },
+      { id: second, ticker: 'YPF', name: 'YPF', type: 'ACCIONES' },
+    ]);
+    await expect(queries.latestMarketDataFor([first, second])).resolves.toEqual([
+      {
+        instrumentId: first,
+        close: new Prisma.Decimal('10.50').toFixed(),
+        previousClose: new Prisma.Decimal('10.00').toFixed(),
+        observedAt: '2026-01-16T00:00:00.000Z',
+      },
+    ]);
+
+    const [instrumentsSql, instrumentIds] = queryRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      string[],
+    ];
+    const [quotesSql, quoteIds] = queryRaw.mock.calls[1] as [
+      TemplateStringsArray,
+      string[],
+    ];
+
+    expect(instrumentIds).toEqual([first, second]);
+    expect(sqlText(instrumentsSql)).toContain('id = ANY(');
+    expect(sqlText(instrumentsSql)).toContain('::uuid[]');
+    expect(quoteIds).toEqual([first, second]);
+    expect(sqlText(quotesSql)).toContain('unnest(');
+    expect(sqlText(quotesSql)).toContain('JOIN LATERAL');
+    expect(sqlText(quotesSql)).toContain('ORDER BY observed_at DESC');
+    expect(sqlText(quotesSql)).toContain('LIMIT 1');
+    expect(getTransactionClient).not.toHaveBeenCalled();
+  });
 });

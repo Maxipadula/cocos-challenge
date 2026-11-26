@@ -23,4 +23,10 @@ export abstract class InstrumentQueries {
   ): Promise<readonly InstrumentInfo[]>;
 
   abstract latestMarketData(id: Uuid): Promise<MarketDataQuote | null>;
+
+  abstract findByIds(ids: readonly Uuid[]): Promise<readonly InstrumentInfo[]>;
+
+  abstract latestMarketDataFor(
+    ids: readonly Uuid[],
+  ): Promise<readonly MarketDataQuote[]>;
 }

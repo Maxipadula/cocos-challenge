@@ -23,6 +23,10 @@ type MarketDataRow = {
   observed_at: Date;
 };
 
+type BatchMarketDataRow = MarketDataRow & {
+  instrument_id: string;
+};
+
 @Injectable()
 export class PrismaInstrumentQueries extends InstrumentQueries {
   constructor(private readonly clients: PrismaClientProvider) {
@@ -76,13 +80,62 @@ export class PrismaInstrumentQueries extends InstrumentQueries {
       return null;
     }
 
-    return {
-      instrumentId: uuid(id),
-      close: decimalToPlainString(row.close),
-      previousClose: decimalToPlainString(row.previous_close),
-      observedAt: row.observed_at.toISOString(),
-    };
+    return toMarketDataQuote(id, row);
   }
+
+  override async findByIds(
+    ids: readonly Uuid[],
+  ): Promise<readonly InstrumentInfo[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.clients.getClient().$queryRaw<InstrumentRow[]>`
+      SELECT id, ticker, name, type
+      FROM instruments
+      WHERE id = ANY(${[...ids]}::uuid[])
+    `;
+
+    return rows.map(toInstrumentInfo);
+  }
+
+  override async latestMarketDataFor(
+    ids: readonly Uuid[],
+  ): Promise<readonly MarketDataQuote[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.clients.getClient().$queryRaw<BatchMarketDataRow[]>`
+      SELECT
+        md.instrument_id,
+        md.close,
+        md.previous_close,
+        md.observed_at
+      FROM unnest(${[...ids]}::uuid[]) AS requested(id)
+      JOIN LATERAL (
+        SELECT instrument_id, close, previous_close, observed_at
+        FROM market_data
+        WHERE instrument_id = requested.id
+        ORDER BY observed_at DESC
+        LIMIT 1
+      ) md ON true
+    `;
+
+    return rows.map((row) => toMarketDataQuote(row.instrument_id, row));
+  }
+}
+
+function toMarketDataQuote(
+  instrumentId: string,
+  row: MarketDataRow,
+): MarketDataQuote {
+  return {
+    instrumentId: uuid(instrumentId),
+    close: decimalToPlainString(row.close),
+    previousClose: decimalToPlainString(row.previous_close),
+    observedAt: row.observed_at.toISOString(),
+  };
 }
 
 function toInstrumentInfo(row: InstrumentRow): InstrumentInfo {

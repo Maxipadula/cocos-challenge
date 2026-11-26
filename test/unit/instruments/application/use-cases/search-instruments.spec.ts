@@ -34,6 +34,14 @@ class FakeInstrumentQueries extends InstrumentQueries {
   override async latestMarketData(): Promise<MarketDataQuote | null> {
     return null;
   }
+
+  override async findByIds(): Promise<readonly InstrumentInfo[]> {
+    return [];
+  }
+
+  override async latestMarketDataFor(): Promise<readonly MarketDataQuote[]> {
+    return [];
+  }
 }
 
 describe('SearchInstruments', () => {
