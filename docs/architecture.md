@@ -90,6 +90,13 @@ La transacción no envuelve el arranque de la aplicación. `PrismaService` conec
 - Prettier: comillas simples, punto y coma, trailing comma, ancho 80, fin de línea LF.
 - El cliente generado de Prisma queda en `src/generated` y no se versiona. `prisma generate` corre antes del build, de los tests y del typecheck.
 - Los mensajes de error del código están en inglés. Este documento está en español.
+- El dominio no deja archivos sueltos en `domain/`. Cada módulo usa solo las carpetas que tengan tipos con responsabilidad propia:
+  - `domain/entities/`
+  - `domain/value-objects/`
+  - `domain/errors/`
+  - `domain/services/`, para comportamiento que no cabe en una entidad ni en un value object.
+- Un value object compartido entre módulos vive en `shared/domain/value-objects/`. Un error genérico compartido vive en `shared/domain/errors/`. El error de un módulo permanece en el `domain/errors/` de ese módulo.
+- No se crean carpetas ni clases vacías para completar esa estructura. La convención vale para todos los módulos.
 
 Tests con Vitest, que es el runner del scaffold ESM de Nest 12:
 
