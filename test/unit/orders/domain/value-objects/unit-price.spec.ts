@@ -18,6 +18,13 @@ describe('UnitPrice', () => {
     expect(cost.toDecimalString()).toBe('99.99');
   });
 
+  it('multiplies a maximum price without capping the product', () => {
+    const cost = UnitPrice.parse('9'.repeat(20)).multiply(ShareQuantity.of(2n));
+
+    expect(cost.toDecimalString()).toBe(`1${'9'.repeat(19)}8`);
+    expect(cost.integerDigitCount()).toBe(21);
+  });
+
   it('floors the number of shares an amount can buy', () => {
     const price = UnitPrice.parse('33.33');
 

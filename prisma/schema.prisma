@@ -6,3 +6,105 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum OrderSide {
+  BUY
+  SELL
+  CASH_IN
+  CASH_OUT
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum OrderStatus {
+  NEW
+  FILLED
+  REJECTED
+  CANCELLED
+}
+
+enum RejectionReason {
+  INSUFFICIENT_CASH
+  INSUFFICIENT_SHARES
+}
+
+model User {
+  id                 String              @id @db.Uuid
+  email              String              @unique
+  account            Account?
+  idempotencyRecords IdempotencyRecord[]
+
+  @@map("users")
+}
+
+model Account {
+  id            String  @id @db.Uuid
+  userId        String  @unique @map("user_id") @db.Uuid
+  accountNumber String  @unique @map("account_number") @db.VarChar(64)
+  user          User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orders        Order[]
+
+  @@map("accounts")
+}
+
+model Instrument {
+  id         String       @id @db.Uuid
+  ticker     String       @unique @db.VarChar(32)
+  name       String
+  type       String       @db.VarChar(32)
+  orders     Order[]
+  marketData MarketData[]
+
+  @@map("instruments")
+}
+
+model MarketData {
+  id            String     @id @db.Uuid
+  instrumentId  String     @map("instrument_id") @db.Uuid
+  high          Decimal    @db.Decimal(38, 18)
+  low           Decimal    @db.Decimal(38, 18)
+  open          Decimal    @db.Decimal(38, 18)
+  close         Decimal    @db.Decimal(38, 18)
+  previousClose Decimal    @map("previous_close") @db.Decimal(38, 18)
+  observedAt    DateTime   @map("observed_at") @db.Timestamptz(3)
+  instrument    Instrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+
+  @@unique([instrumentId, observedAt])
+  @@map("market_data")
+}
+
+model Order {
+  id              String           @id @db.Uuid
+  accountId       String           @map("account_id") @db.Uuid
+  instrumentId    String           @map("instrument_id") @db.Uuid
+  side            OrderSide
+  size            Decimal          @db.Decimal(38, 18)
+  price           Decimal?         @db.Decimal(38, 18)
+  type            OrderType?
+  status          OrderStatus
+  rejectionReason RejectionReason? @map("rejection_reason")
+  placedAt        DateTime         @map("placed_at") @db.Timestamptz(3)
+  account         Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  instrument      Instrument       @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, instrumentId])
+  @@map("orders")
+}
+
+model IdempotencyRecord {
+  id             String   @id @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(255)
+  operation      String
+  requestHash    String   @map("request_hash") @db.Char(64)
+  result         Json     @db.JsonB
+  createdAt      DateTime @map("created_at") @db.Timestamptz(3)
+  completedAt    DateTime @map("completed_at") @db.Timestamptz(3)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@map("idempotency_records")
+}

@@ -2,6 +2,7 @@ import { InvalidMoneyError } from '../errors/value-object-errors.js';
 
 const DECIMAL_PATTERN = /^(-?)(\d+)(?:\.(\d+))?$/;
 const MAX_SCALE = 18;
+export const MAX_MONEY_INTEGER_DIGITS = 20;
 
 export class Money {
   private constructor(
@@ -17,8 +18,12 @@ export class Money {
     }
 
     const fraction = match[3] ?? '';
+    const integerDigits = match[2].replace(/^0+/, '');
 
-    if (fraction.length > MAX_SCALE) {
+    if (
+      fraction.length > MAX_SCALE ||
+      integerDigits.length > MAX_MONEY_INTEGER_DIGITS
+    ) {
       throw new InvalidMoneyError();
     }
 
@@ -97,6 +102,17 @@ export class Money {
     }
 
     return 0;
+  }
+
+  integerDigitCount(): number {
+    if (this.units === 0n) {
+      return 1;
+    }
+
+    const digits = (this.units < 0n ? -this.units : this.units).toString();
+    const whole = digits.length - this.scale;
+
+    return whole > 0 ? whole : 1;
   }
 
   toDecimalString(): string {

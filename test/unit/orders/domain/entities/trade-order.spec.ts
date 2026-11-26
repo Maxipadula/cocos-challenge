@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TradeOrder } from '#orders/domain/entities/trade-order.js';
 import {
   InvalidOrderTimestampError,
+  InvalidShareQuantityError,
   OrderNotCancellableError,
   OrderSizeRequiredError,
 } from '#orders/domain/errors/order-errors.js';
@@ -127,5 +128,19 @@ describe('TradeOrder', () => {
         price: price('8.00'),
       }),
     ).toThrow(InvalidOrderTimestampError);
+  });
+
+  it('rejects a share quantity above the persistable range', () => {
+    const size = ShareQuantity.of(10n ** 20n - 1n).add(ShareQuantity.of(1n));
+
+    expect(size.toBigInt()).toBe(10n ** 20n);
+    expect(() =>
+      TradeOrder.limitOpen({
+        ...identity(11, 1n),
+        side: 'BUY',
+        size,
+        price: price('1.00'),
+      }),
+    ).toThrow(InvalidShareQuantityError);
   });
 });

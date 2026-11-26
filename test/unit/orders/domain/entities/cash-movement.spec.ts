@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { InvalidMoneyError } from '#shared/domain/errors/value-object-errors.js';
 import { Money } from '#shared/domain/value-objects/money.js';
 
 import { CashMovement } from '#orders/domain/entities/cash-movement.js';
@@ -77,5 +78,29 @@ describe('CashMovement', () => {
     expect(() =>
       CashMovement.cashOut({ ...cash(2, '-5.00'), availableCash: available }),
     ).toThrow(NonPositiveAmountError);
+  });
+
+  it('rejects an amount above the persistable range and still adds large balances', () => {
+    const maximum = Money.parse('9'.repeat(20));
+    const overflow = maximum.add(Money.parse('1'));
+    const deposit = CashMovement.cashIn({
+      ...cash(1, '1.00'),
+      amount: maximum,
+    });
+
+    expect(overflow.toDecimalString()).toBe(`1${'0'.repeat(20)}`);
+    expect(availableCash([deposit, deposit]).toDecimalString()).toBe(
+      maximum.add(maximum).toDecimalString(),
+    );
+    expect(() =>
+      CashMovement.cashIn({ ...cash(2, '1.00'), amount: overflow }),
+    ).toThrow(InvalidMoneyError);
+    expect(() =>
+      CashMovement.cashOut({
+        ...cash(3, '1.00'),
+        amount: overflow,
+        availableCash: overflow,
+      }),
+    ).toThrow(InvalidMoneyError);
   });
 });

@@ -42,7 +42,11 @@
     "test:functional": "vitest run --config vitest.config.functional.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretypecheck": "prisma generate",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status"
   },
   "dependencies": {
     "@nestjs/common": "12.6.2",

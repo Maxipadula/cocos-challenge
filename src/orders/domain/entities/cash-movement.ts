@@ -1,4 +1,8 @@
-import { Money } from '#shared/domain/value-objects/money.js';
+import { InvalidMoneyError } from '#shared/domain/errors/value-object-errors.js';
+import {
+  MAX_MONEY_INTEGER_DIGITS,
+  Money,
+} from '#shared/domain/value-objects/money.js';
 
 import {
   InvalidOrderTimestampError,
@@ -34,6 +38,7 @@ export class CashMovement {
 
   static cashIn(props: CashMovementProps): CashMovement {
     assertPositiveAmount(props.amount);
+    assertPersistableAmount(props.amount);
     return new CashMovement(
       props.id,
       props.accountId,
@@ -50,6 +55,7 @@ export class CashMovement {
     props: CashMovementProps & { readonly availableCash: Money },
   ): CashMovement {
     assertPositiveAmount(props.amount);
+    assertPersistableAmount(props.amount);
     const rejected = props.availableCash.lessThan(props.amount);
 
     return new CashMovement(
@@ -88,6 +94,12 @@ export class CashMovement {
 function assertPositiveAmount(amount: Money): void {
   if (!amount.isPositive()) {
     throw new NonPositiveAmountError();
+  }
+}
+
+function assertPersistableAmount(amount: Money): void {
+  if (amount.integerDigitCount() > MAX_MONEY_INTEGER_DIGITS) {
+    throw new InvalidMoneyError();
   }
 }
 

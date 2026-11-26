@@ -36,4 +36,48 @@ describe('Money', () => {
     expect(Money.parse('100.00').floorDivide(Money.parse('33.33'))).toBe(3n);
     expect(Money.parse('25.000').floorDivide(Money.parse('10.00'))).toBe(2n);
   });
+
+  it('accepts 20 integer digits and 18 fractional digits', () => {
+    const integer = '9'.repeat(20);
+    const fraction = '1'.repeat(18);
+
+    expect(Money.parse(integer).toDecimalString()).toBe(integer);
+    expect(Money.parse(integer).integerDigitCount()).toBe(20);
+    expect(Money.parse(`0.${fraction}`).toDecimalString()).toBe(
+      `0.${fraction}`,
+    );
+  });
+
+  it('rejects 21 integer digits and 19 fractional digits', () => {
+    expect(() => Money.parse(`1${'0'.repeat(20)}`)).toThrow(InvalidMoneyError);
+    expect(() => Money.parse(`-${'1'}${'0'.repeat(20)}`)).toThrow(
+      InvalidMoneyError,
+    );
+    expect(() => Money.parse(`0.${'1'.repeat(19)}`)).toThrow(InvalidMoneyError);
+  });
+
+  it('accepts a negative amount inside the integer limit', () => {
+    const amount = Money.parse(`-${'9'.repeat(20)}.50`);
+
+    expect(amount.toDecimalString()).toBe(`-${'9'.repeat(20)}.50`);
+    expect(amount.isNegative()).toBe(true);
+  });
+
+  it('ignores leading zeros when counting integer digits', () => {
+    expect(Money.parse(`000${'9'.repeat(20)}`).toDecimalString()).toBe(
+      '9'.repeat(20),
+    );
+    expect(Money.parse('000').toDecimalString()).toBe('0');
+    expect(Money.parse('000.10').toDecimalString()).toBe('0.10');
+    expect(() => Money.parse(`0001${'0'.repeat(20)}`)).toThrow(
+      InvalidMoneyError,
+    );
+  });
+
+  it('adds values past the storage limit without truncating the sum', () => {
+    const sum = Money.parse('9'.repeat(20)).add(Money.parse('1'));
+
+    expect(sum.toDecimalString()).toBe(`1${'0'.repeat(20)}`);
+    expect(sum.integerDigitCount()).toBe(21);
+  });
 });

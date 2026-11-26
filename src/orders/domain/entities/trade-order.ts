@@ -1,7 +1,12 @@
-import { Money } from '#shared/domain/value-objects/money.js';
+import {
+  MAX_MONEY_INTEGER_DIGITS,
+  Money,
+} from '#shared/domain/value-objects/money.js';
 
 import {
   InvalidOrderTimestampError,
+  InvalidShareQuantityError,
+  InvalidUnitPriceError,
   OrderNotCancellableError,
   OrderSizeRequiredError,
 } from '../errors/order-errors.js';
@@ -62,7 +67,7 @@ export class TradeOrder {
   static marketFilled(
     props: TradeOrderProps & { readonly price: UnitPrice },
   ): TradeOrder {
-    assertOrderSize(props.size);
+    assertPersistableOrder(props.size, props.price);
     return new TradeOrder(
       props.id,
       props.accountId,
@@ -80,7 +85,7 @@ export class TradeOrder {
       readonly reason: RejectionReason;
     },
   ): TradeOrder {
-    assertOrderSize(props.size);
+    assertPersistableOrder(props.size, props.price);
     return new TradeOrder(
       props.id,
       props.accountId,
@@ -95,7 +100,7 @@ export class TradeOrder {
   static limitOpen(
     props: TradeOrderProps & { readonly price: UnitPrice },
   ): TradeOrder {
-    assertOrderSize(props.size);
+    assertPersistableOrder(props.size, props.price);
     return new TradeOrder(
       props.id,
       props.accountId,
@@ -113,7 +118,7 @@ export class TradeOrder {
       readonly reason: RejectionReason;
     },
   ): TradeOrder {
-    assertOrderSize(props.size);
+    assertPersistableOrder(props.size, props.price);
     return new TradeOrder(
       props.id,
       props.accountId,
@@ -128,7 +133,7 @@ export class TradeOrder {
   static limitCancelled(
     props: TradeOrderProps & { readonly price: UnitPrice },
   ): TradeOrder {
-    assertOrderSize(props.size);
+    assertPersistableOrder(props.size, props.price);
     return new TradeOrder(
       props.id,
       props.accountId,
@@ -231,9 +236,20 @@ export class TradeOrder {
   }
 }
 
-function assertOrderSize(size: ShareQuantity): void {
+function assertPersistableOrder(size: ShareQuantity, price: UnitPrice): void {
   if (size.isZero()) {
     throw new OrderSizeRequiredError();
+  }
+
+  if (size.toBigInt() >= 10n ** BigInt(MAX_MONEY_INTEGER_DIGITS)) {
+    throw new InvalidShareQuantityError();
+  }
+
+  if (
+    price.multiply(ShareQuantity.of(1n)).integerDigitCount() >
+    MAX_MONEY_INTEGER_DIGITS
+  ) {
+    throw new InvalidUnitPriceError();
   }
 }
 

@@ -1,10 +1,12 @@
 import { InvalidShareQuantityError } from '../errors/order-errors.js';
 
+const MAX_QUANTITY = 10n ** 20n;
+
 export class ShareQuantity {
   private constructor(private readonly value: bigint) {}
 
   static of(value: bigint): ShareQuantity {
-    if (value < 0n) {
+    if (value < 0n || value >= MAX_QUANTITY) {
       throw new InvalidShareQuantityError();
     }
 
