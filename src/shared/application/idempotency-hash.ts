@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+
 import type { Money } from '../domain/value-objects/money.js';
 import { isJsonObject, type JsonObject, type JsonValue } from './json.js';
 

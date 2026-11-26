@@ -1,17 +1,16 @@
-import type {
-  InstrumentId,
-  UserId,
-} from '../../../shared/domain/value-objects/ids.js';
-import { Money } from '../../../shared/domain/value-objects/money.js';
-import { ShareQuantity } from '../../../shared/domain/value-objects/share-quantity.js';
-import type { UnitPrice } from '../../../shared/domain/value-objects/unit-price.js';
+import { Money } from '#shared/domain/value-objects/money.js';
+
 import {
   InvalidOrderTimestampError,
   OrderNotCancellableError,
   OrderSizeRequiredError,
 } from '../errors/order-errors.js';
+import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { RejectionReason } from '../value-objects/rejection-reason.js';
+import { ShareQuantity } from '../value-objects/share-quantity.js';
+import type { UnitPrice } from '../value-objects/unit-price.js';
+import type { UserId } from '../value-objects/user-id.js';
 
 export type TradeSide = 'BUY' | 'SELL';
 export type TradeType = 'MARKET' | 'LIMIT';

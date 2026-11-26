@@ -84,7 +84,14 @@ La transacción no envuelve el arranque de la aplicación. `PrismaService` conec
 ## Convenciones de código
 
 - Archivos en kebab-case. Las clases de Nest conservan el sufijo de rol: `prisma.service.ts`, `orders.module.ts`.
-- Imports relativos ESM con extensión `.js`.
+- Los imports ESM conservan la extensión `.js`. Entre módulos se usa `package.json#imports`:
+  - `#shared/*` apunta a `src/shared/*`.
+  - `#orders/*` apunta a `src/orders/*`.
+  - `#instruments/*` apunta a `src/instruments/*`.
+  - `#portfolio/*` apunta a `src/portfolio/*`.
+    Dentro de un módulo el import sigue siendo relativo. `main.ts` importa `./app.module.js` y el cliente generado de Prisma también se importa en relativo: no hay alias para ellos. Un alias no autoriza a entrar al dominio interno de otro módulo.
+    TypeScript y Vitest usan la condición `cocos-source`, que resuelve el alias al `.ts` de `src`. Los tests no dependen de `dist`. Node, al correr el JavaScript compilado, usa el target `default` y carga `dist`.
+    ESLint ordena los imports en cinco grupos, separados por una línea en blanco y en orden alfabético dentro de cada uno: módulos nativos de Node, dependencias externas, `#shared`, luego `#instruments`, `#orders` y `#portfolio`, y al final los imports relativos. Los imports del mismo archivo se combinan. Si todo lo importado son tipos, se escribe `import type`.
 - TypeScript `strict`. `strictPropertyInitialization` queda desactivado, igual que el preset strict de Nest, porque la inyección por decoradores no siempre es visible para ese chequeo.
 - Sin `any`. ESLint lo marca como error, junto con promesas flotantes.
 - Prettier: comillas simples, punto y coma, trailing comma, ancho 80, fin de línea LF.
@@ -95,7 +102,7 @@ La transacción no envuelve el arranque de la aplicación. `PrismaService` conec
   - `domain/value-objects/`
   - `domain/errors/`
   - `domain/services/`, para comportamiento que no cabe en una entidad ni en un value object.
-- Un value object compartido entre módulos vive en `shared/domain/value-objects/`. Un error genérico compartido vive en `shared/domain/errors/`. El error de un módulo permanece en el `domain/errors/` de ese módulo.
+- `shared/domain` contiene exclusivamente conceptos de un Shared Kernel explícitamente acordado. La reutilización de código no es motivo suficiente para compartir value objects entre bounded contexts. Hoy el kernel es `Money` y `Uuid`. Los identificadores de un contexto se construyen sobre `Uuid` dentro de ese contexto. Un error de un value object compartido vive en `shared/domain/errors/`. El error de un módulo permanece en su `domain/errors/`.
 - No se crean carpetas ni clases vacías para completar esa estructura. La convención vale para todos los módulos.
 - Los identificadores generados por el sistema son UUID v4 en `string` marcado. El dominio valida el formato y lo guarda en minúsculas. PostgreSQL usa el tipo `UUID` para esas primary y foreign keys, no secuencias numéricas. `UuidGenerator`, en `shared/application`, es el puerto de generación. Su adaptador usa `crypto.randomUUID()`. La `Idempotency-Key` la envía el cliente y sigue siendo un identificador opaco: no se exige que sea un UUID.
 

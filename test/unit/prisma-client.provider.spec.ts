@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import {
   ActiveTransactionRequiredError,
   PrismaClientProvider,
-} from '../../src/shared/infrastructure/prisma/prisma-client.provider.js';
-import { PrismaUnitOfWork } from '../../src/shared/infrastructure/prisma/prisma-unit-of-work.js';
-import type { PrismaService } from '../../src/shared/infrastructure/prisma/prisma.service.js';
+} from '#shared/infrastructure/prisma/prisma-client.provider.js';
+import { PrismaUnitOfWork } from '#shared/infrastructure/prisma/prisma-unit-of-work.js';
+import type { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
 
 function createPrismaDouble(transaction: object) {
   const prisma = {

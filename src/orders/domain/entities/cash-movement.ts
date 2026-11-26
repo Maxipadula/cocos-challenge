@@ -1,14 +1,13 @@
-import type {
-  InstrumentId,
-  UserId,
-} from '../../../shared/domain/value-objects/ids.js';
-import { Money } from '../../../shared/domain/value-objects/money.js';
+import { Money } from '#shared/domain/value-objects/money.js';
+
 import {
   InvalidOrderTimestampError,
   NonPositiveAmountError,
 } from '../errors/order-errors.js';
+import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { RejectionReason } from '../value-objects/rejection-reason.js';
+import type { UserId } from '../value-objects/user-id.js';
 
 export type CashSide = 'CASH_IN' | 'CASH_OUT';
 export type CashStatus = 'FILLED' | 'REJECTED';

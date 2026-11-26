@@ -1,4 +1,5 @@
 import 'dotenv/config';
+
 import { defineConfig } from 'prisma/config';
 
 // Placeholder so `prisma generate` can load this file before a local database

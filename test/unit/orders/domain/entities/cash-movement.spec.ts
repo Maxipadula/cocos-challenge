@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
-import { CashMovement } from '../../../../../src/orders/domain/entities/cash-movement.js';
-import { NonPositiveAmountError } from '../../../../../src/orders/domain/errors/order-errors.js';
-import { availableCash } from '../../../../../src/orders/domain/services/availability.js';
+
+import { Money } from '#shared/domain/value-objects/money.js';
+
+import { CashMovement } from '#orders/domain/entities/cash-movement.js';
+import { NonPositiveAmountError } from '#orders/domain/errors/order-errors.js';
+import { availableCash } from '#orders/domain/services/availability.js';
+
 import { identity, peso } from '../order-fixture.js';
 
 function cash(id: number, amount: string) {

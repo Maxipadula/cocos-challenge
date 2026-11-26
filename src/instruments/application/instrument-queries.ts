@@ -1,13 +1,12 @@
-import type { InstrumentId } from '../../shared/domain/value-objects/ids.js';
-import type { UnitPrice } from '../../shared/domain/value-objects/unit-price.js';
+import type { Uuid } from '#shared/domain/value-objects/uuid.js';
 
 export type InstrumentInfo = {
-  readonly id: InstrumentId;
+  readonly id: Uuid;
   readonly type: string;
 };
 
 export abstract class InstrumentQueries {
-  abstract findById(id: InstrumentId): Promise<InstrumentInfo | null>;
+  abstract findById(id: Uuid): Promise<InstrumentInfo | null>;
 
-  abstract latestClose(id: InstrumentId): Promise<UnitPrice | null>;
+  abstract latestClose(id: Uuid): Promise<string | null>;
 }

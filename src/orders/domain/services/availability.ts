@@ -1,8 +1,9 @@
-import { Money } from '../../../shared/domain/value-objects/money.js';
-import { ShareQuantity } from '../../../shared/domain/value-objects/share-quantity.js';
-import type { InstrumentId } from '../../../shared/domain/value-objects/ids.js';
+import { Money } from '#shared/domain/value-objects/money.js';
+
 import type { CashMovement } from '../entities/cash-movement.js';
 import { TradeOrder } from '../entities/trade-order.js';
+import type { InstrumentId } from '../value-objects/instrument-id.js';
+import { ShareQuantity } from '../value-objects/share-quantity.js';
 
 export type AccountEntry = TradeOrder | CashMovement;
 

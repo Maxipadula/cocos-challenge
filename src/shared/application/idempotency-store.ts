@@ -1,4 +1,4 @@
-import type { UserId } from '../domain/value-objects/ids.js';
+import type { Uuid } from '../domain/value-objects/uuid.js';
 import type { JsonValue } from './json.js';
 
 export class IdempotencyConflictError extends Error {
@@ -15,7 +15,7 @@ export type StoredIdempotency = {
 };
 
 export type NewIdempotencyRecord = {
-  readonly userId: UserId;
+  readonly userId: Uuid;
   readonly idempotencyKey: string;
   readonly operation: string;
   readonly requestHash: string;
@@ -24,7 +24,7 @@ export type NewIdempotencyRecord = {
 
 export abstract class IdempotencyStore {
   abstract find(
-    userId: UserId,
+    userId: Uuid,
     idempotencyKey: string,
   ): Promise<StoredIdempotency | null>;
 

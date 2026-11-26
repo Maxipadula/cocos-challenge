@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidMoneyError } from '../../../../../src/shared/domain/errors/value-object-errors.js';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
+
+import { InvalidMoneyError } from '#shared/domain/errors/value-object-errors.js';
+import { Money } from '#shared/domain/value-objects/money.js';
 
 describe('Money', () => {
   it('adds decimal values without binary floating point error', () => {

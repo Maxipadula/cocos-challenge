@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
+
 import {
   getCurrentTransactionClient,
-  resolvePrismaClient,
   type PrismaExecutor,
   type PrismaTransactionClient,
+  resolvePrismaClient,
 } from './prisma-transaction-context.js';
 import { PrismaService } from './prisma.service.js';
 

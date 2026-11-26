@@ -1,20 +1,19 @@
-import type {
-  InstrumentId,
-  UserId,
-} from '../../../shared/domain/value-objects/ids.js';
-import type { Money } from '../../../shared/domain/value-objects/money.js';
-import type { ShareQuantity } from '../../../shared/domain/value-objects/share-quantity.js';
-import type { UnitPrice } from '../../../shared/domain/value-objects/unit-price.js';
+import type { Money } from '#shared/domain/value-objects/money.js';
+
 import { TradeOrder, type TradeSide } from '../entities/trade-order.js';
 import {
   NonPositiveAmountError,
   OrderSizeRequiredError,
 } from '../errors/order-errors.js';
+import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
+import type { ShareQuantity } from '../value-objects/share-quantity.js';
+import type { UnitPrice } from '../value-objects/unit-price.js';
+import type { UserId } from '../value-objects/user-id.js';
 import {
+  type AccountEntry,
   availableCash,
   availableShares,
-  type AccountEntry,
 } from './availability.js';
 
 export type TradeSizing =

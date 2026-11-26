@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   InvalidOrderIdError,
   InvalidRejectionReasonError,
-} from '../../../../../src/orders/domain/errors/order-errors.js';
-import { orderId } from '../../../../../src/orders/domain/value-objects/order-id.js';
-import { rejectionReason } from '../../../../../src/orders/domain/value-objects/rejection-reason.js';
+} from '#orders/domain/errors/order-errors.js';
+import { orderId } from '#orders/domain/value-objects/order-id.js';
+import { rejectionReason } from '#orders/domain/value-objects/rejection-reason.js';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 

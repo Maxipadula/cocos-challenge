@@ -1,8 +1,10 @@
 import 'dotenv/config';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PrismaUnitOfWork } from '../../src/shared/infrastructure/prisma/prisma-unit-of-work.js';
-import { resolvePrismaClient } from '../../src/shared/infrastructure/prisma/prisma-transaction-context.js';
-import { PrismaService } from '../../src/shared/infrastructure/prisma/prisma.service.js';
+
+import { resolvePrismaClient } from '#shared/infrastructure/prisma/prisma-transaction-context.js';
+import { PrismaUnitOfWork } from '#shared/infrastructure/prisma/prisma-unit-of-work.js';
+import { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
 
 const describeWithDatabase = process.env.DATABASE_URL
   ? describe

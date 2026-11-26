@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidUnitPriceError } from '../../../../../src/shared/domain/errors/value-object-errors.js';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
-import { ShareQuantity } from '../../../../../src/shared/domain/value-objects/share-quantity.js';
-import { UnitPrice } from '../../../../../src/shared/domain/value-objects/unit-price.js';
+
+import { Money } from '#shared/domain/value-objects/money.js';
+
+import { InvalidUnitPriceError } from '#orders/domain/errors/order-errors.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
+import { UnitPrice } from '#orders/domain/value-objects/unit-price.js';
 
 describe('UnitPrice', () => {
   it('rejects a zero or negative price', () => {

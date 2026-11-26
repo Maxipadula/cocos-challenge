@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidShareQuantityError } from '../../../../../src/shared/domain/errors/value-object-errors.js';
-import { ShareQuantity } from '../../../../../src/shared/domain/value-objects/share-quantity.js';
+
+import { InvalidShareQuantityError } from '#orders/domain/errors/order-errors.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
 
 describe('ShareQuantity', () => {
   it('accepts zero and adds whole shares', () => {

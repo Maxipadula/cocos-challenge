@@ -1,4 +1,4 @@
-import { InvalidShareQuantityError } from '../errors/value-object-errors.js';
+import { InvalidShareQuantityError } from '../errors/order-errors.js';
 
 export class ShareQuantity {
   private constructor(private readonly value: bigint) {}

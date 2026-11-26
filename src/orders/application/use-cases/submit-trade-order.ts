@@ -1,39 +1,39 @@
-import { IdempotencyConflictError } from '../../../shared/application/idempotency-store.js';
-import type {
-  IdempotencyStore,
-  StoredIdempotency,
-} from '../../../shared/application/idempotency-store.js';
 import {
   canonicalDecimal,
   hashIdempotencyRequest,
-} from '../../../shared/application/idempotency-hash.js';
+} from '#shared/application/idempotency-hash.js';
+import {
+  IdempotencyConflictError,
+  type IdempotencyStore,
+  type StoredIdempotency,
+} from '#shared/application/idempotency-store.js';
 import {
   isJsonObject,
   type JsonObject,
   type JsonValue,
-} from '../../../shared/application/json.js';
-import type { UnitOfWork } from '../../../shared/application/unit-of-work.js';
-import type { UuidGenerator } from '../../../shared/application/uuid-generator.js';
-import type {
-  InstrumentId,
-  UserId,
-} from '../../../shared/domain/value-objects/ids.js';
-import { ShareQuantity } from '../../../shared/domain/value-objects/share-quantity.js';
-import type { UnitPrice } from '../../../shared/domain/value-objects/unit-price.js';
-import type { InstrumentQueries } from '../../../instruments/application/instrument-queries.js';
-import {
-  decideTradeOrder,
-  type DecideTradeOrderCommand,
-  type TradeSizing,
-} from '../../domain/services/decide-trade-order.js';
+} from '#shared/application/json.js';
+import type { UnitOfWork } from '#shared/application/unit-of-work.js';
+import type { UuidGenerator } from '#shared/application/uuid-generator.js';
+
+import type { InstrumentQueries } from '#instruments/application/instrument-queries.js';
+
 import type {
   TradeOrder,
   TradeSide,
   TradeStatus,
   TradeType,
 } from '../../domain/entities/trade-order.js';
+import {
+  decideTradeOrder,
+  type DecideTradeOrderCommand,
+  type TradeSizing,
+} from '../../domain/services/decide-trade-order.js';
+import type { InstrumentId } from '../../domain/value-objects/instrument-id.js';
 import { orderId, type OrderId } from '../../domain/value-objects/order-id.js';
 import type { RejectionReason } from '../../domain/value-objects/rejection-reason.js';
+import { ShareQuantity } from '../../domain/value-objects/share-quantity.js';
+import { UnitPrice } from '../../domain/value-objects/unit-price.js';
+import type { UserId } from '../../domain/value-objects/user-id.js';
 import type { OrderRepository } from '../ports/order-repository.js';
 import type { UserLock } from '../ports/user-lock.js';
 
@@ -147,7 +147,7 @@ export class SubmitTradeOrder {
       throw new MarketPriceUnavailableError();
     }
 
-    return close;
+    return UnitPrice.parse(close);
   }
 
   private async decideAndPersist(

@@ -1,10 +1,8 @@
-import { orderId } from '../../../../src/orders/domain/value-objects/order-id.js';
-import {
-  instrumentId,
-  userId,
-} from '../../../../src/shared/domain/value-objects/ids.js';
-import { ShareQuantity } from '../../../../src/shared/domain/value-objects/share-quantity.js';
-import { UnitPrice } from '../../../../src/shared/domain/value-objects/unit-price.js';
+import { instrumentId } from '#orders/domain/value-objects/instrument-id.js';
+import { orderId } from '#orders/domain/value-objects/order-id.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
+import { UnitPrice } from '#orders/domain/value-objects/unit-price.js';
+import { userId } from '#orders/domain/value-objects/user-id.js';
 
 export const placedAt = new Date('2026-01-15T15:00:00.000Z');
 export const owner = userId(fixtureUuid(7));

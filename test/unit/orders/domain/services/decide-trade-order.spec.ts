@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
-import { ShareQuantity } from '../../../../../src/shared/domain/value-objects/share-quantity.js';
-import { CashMovement } from '../../../../../src/orders/domain/entities/cash-movement.js';
+
+import { Money } from '#shared/domain/value-objects/money.js';
+
+import { CashMovement } from '#orders/domain/entities/cash-movement.js';
 import {
   NonPositiveAmountError,
   OrderSizeRequiredError,
-} from '../../../../../src/orders/domain/errors/order-errors.js';
-import { orderId } from '../../../../../src/orders/domain/value-objects/order-id.js';
+} from '#orders/domain/errors/order-errors.js';
 import {
   availableCash,
   availableShares,
-} from '../../../../../src/orders/domain/services/availability.js';
-import { decideTradeOrder } from '../../../../../src/orders/domain/services/decide-trade-order.js';
+} from '#orders/domain/services/availability.js';
+import { decideTradeOrder } from '#orders/domain/services/decide-trade-order.js';
+import { orderId } from '#orders/domain/value-objects/order-id.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
+
 import {
   fixtureUuid,
   identity,

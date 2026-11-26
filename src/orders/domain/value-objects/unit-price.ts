@@ -1,5 +1,6 @@
-import { InvalidUnitPriceError } from '../errors/value-object-errors.js';
-import { Money } from './money.js';
+import { Money } from '#shared/domain/value-objects/money.js';
+
+import { InvalidUnitPriceError } from '../errors/order-errors.js';
 import { ShareQuantity } from './share-quantity.js';
 
 export class UnitPrice {

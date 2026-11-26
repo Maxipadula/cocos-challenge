@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
-import { CashMovement } from '../../../../../src/orders/domain/entities/cash-movement.js';
-import { TradeOrder } from '../../../../../src/orders/domain/entities/trade-order.js';
+
+import { Money } from '#shared/domain/value-objects/money.js';
+
+import { CashMovement } from '#orders/domain/entities/cash-movement.js';
+import { TradeOrder } from '#orders/domain/entities/trade-order.js';
 import {
   availableCash,
   availableShares,
-} from '../../../../../src/orders/domain/services/availability.js';
-import { instrumentId } from '../../../../../src/shared/domain/value-objects/ids.js';
+} from '#orders/domain/services/availability.js';
+import { instrumentId } from '#orders/domain/value-objects/instrument-id.js';
+
 import { fixtureUuid, identity, peso, price, stock } from '../order-fixture.js';
 
 describe('availability', () => {

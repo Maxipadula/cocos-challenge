@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Prisma } from '../../src/generated/prisma/client.js';
+
 import {
   NestedTransactionError,
   resolvePrismaClient,
-} from '../../src/shared/infrastructure/prisma/prisma-transaction-context.js';
-import { PrismaUnitOfWork } from '../../src/shared/infrastructure/prisma/prisma-unit-of-work.js';
-import type { PrismaService } from '../../src/shared/infrastructure/prisma/prisma.service.js';
+} from '#shared/infrastructure/prisma/prisma-transaction-context.js';
+import { PrismaUnitOfWork } from '#shared/infrastructure/prisma/prisma-unit-of-work.js';
+import type { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
+
+import { Prisma } from '../../src/generated/prisma/client.js';
 
 type TransactionOptions = {
   isolationLevel?: Prisma.TransactionIsolationLevel;

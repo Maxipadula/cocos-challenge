@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   canonicalDecimal,
   hashIdempotencyRequest,
-} from '../../../../src/shared/application/idempotency-hash.js';
-import { Money } from '../../../../src/shared/domain/value-objects/money.js';
+} from '#shared/application/idempotency-hash.js';
+import { Money } from '#shared/domain/value-objects/money.js';
 
 describe('idempotency hash', () => {
   it('treats equal money amounts with different scales as the same value', () => {

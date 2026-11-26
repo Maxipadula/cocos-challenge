@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ShareQuantity } from '../../../../../src/shared/domain/value-objects/share-quantity.js';
-import { TradeOrder } from '../../../../../src/orders/domain/entities/trade-order.js';
+
+import { TradeOrder } from '#orders/domain/entities/trade-order.js';
 import {
   InvalidOrderTimestampError,
   OrderNotCancellableError,
   OrderSizeRequiredError,
-} from '../../../../../src/orders/domain/errors/order-errors.js';
+} from '#orders/domain/errors/order-errors.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
+
 import { identity, price, stock } from '../order-fixture.js';
 
 describe('TradeOrder', () => {

@@ -1,40 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { InstrumentQueries } from '../../../../../src/instruments/application/instrument-queries.js';
-import type { InstrumentInfo } from '../../../../../src/instruments/application/instrument-queries.js';
-import { CashMovement } from '../../../../../src/orders/domain/entities/cash-movement.js';
-import type { TradeOrder } from '../../../../../src/orders/domain/entities/trade-order.js';
-import { OrderSizeRequiredError } from '../../../../../src/orders/domain/errors/order-errors.js';
-import { availableCash } from '../../../../../src/orders/domain/services/availability.js';
-import type { AccountEntry } from '../../../../../src/orders/domain/services/availability.js';
-import { OrderRepository } from '../../../../../src/orders/application/ports/order-repository.js';
-import { UserLock } from '../../../../../src/orders/application/ports/user-lock.js';
+
+import {
+  IdempotencyConflictError,
+  IdempotencyStore,
+  type NewIdempotencyRecord,
+  type StoredIdempotency,
+} from '#shared/application/idempotency-store.js';
+import type { JsonValue } from '#shared/application/json.js';
+import { UnitOfWork } from '#shared/application/unit-of-work.js';
+import { UuidGenerator } from '#shared/application/uuid-generator.js';
+import { Money } from '#shared/domain/value-objects/money.js';
+import type { Uuid } from '#shared/domain/value-objects/uuid.js';
+
+import {
+  type InstrumentInfo,
+  InstrumentQueries,
+} from '#instruments/application/instrument-queries.js';
+import { OrderRepository } from '#orders/application/ports/order-repository.js';
+import { UserLock } from '#orders/application/ports/user-lock.js';
 import {
   InstrumentNotFoundError,
   InstrumentNotTradableError,
   InvalidIdempotencyResultError,
   MarketPriceUnavailableError,
-  SubmitTradeOrder,
+  type SubmittedTradeOrder,
   submittedTradeOrderFromJson,
   submittedTradeOrderToJson,
-  submitTradeOrderRequestHash,
+  SubmitTradeOrder,
   type SubmitTradeOrderCommand,
-  type SubmittedTradeOrder,
-} from '../../../../../src/orders/application/use-cases/submit-trade-order.js';
+  submitTradeOrderRequestHash,
+} from '#orders/application/use-cases/submit-trade-order.js';
+import { CashMovement } from '#orders/domain/entities/cash-movement.js';
+import type { TradeOrder } from '#orders/domain/entities/trade-order.js';
+import { OrderSizeRequiredError } from '#orders/domain/errors/order-errors.js';
 import {
-  IdempotencyConflictError,
-  IdempotencyStore,
-} from '../../../../../src/shared/application/idempotency-store.js';
-import type {
-  NewIdempotencyRecord,
-  StoredIdempotency,
-} from '../../../../../src/shared/application/idempotency-store.js';
-import type { JsonValue } from '../../../../../src/shared/application/json.js';
-import { UnitOfWork } from '../../../../../src/shared/application/unit-of-work.js';
-import { UuidGenerator } from '../../../../../src/shared/application/uuid-generator.js';
-import { Money } from '../../../../../src/shared/domain/value-objects/money.js';
-import { ShareQuantity } from '../../../../../src/shared/domain/value-objects/share-quantity.js';
-import type { UnitPrice } from '../../../../../src/shared/domain/value-objects/unit-price.js';
-import type { UserId } from '../../../../../src/shared/domain/value-objects/ids.js';
+  type AccountEntry,
+  availableCash,
+} from '#orders/domain/services/availability.js';
+import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
+
 import {
   fixtureUuid,
   identity,
@@ -85,7 +89,7 @@ class MemoryIdempotencyStore extends IdempotencyStore {
   }
 
   override async find(
-    userId: UserId,
+    userId: Uuid,
     idempotencyKey: string,
   ): Promise<StoredIdempotency | null> {
     this.events.push('idempotency.find');
@@ -137,7 +141,7 @@ class MemoryOrders extends OrderRepository {
 
 class MemoryInstruments extends InstrumentQueries {
   instrument: InstrumentInfo | null = { id: stock, type: 'ACCIONES' };
-  close: UnitPrice | null = price('10.00');
+  close: string | null = '10.00';
 
   constructor(private readonly events: string[]) {
     super();
@@ -148,7 +152,7 @@ class MemoryInstruments extends InstrumentQueries {
     return this.instrument;
   }
 
-  override async latestClose(): Promise<UnitPrice | null> {
+  override async latestClose(): Promise<string | null> {
     this.events.push('close');
     return this.close;
   }
@@ -380,9 +384,22 @@ describe('SubmitTradeOrder', () => {
     ).toBe('10.00');
   });
 
+  it('converts the close string from instruments into the order unit price', async () => {
+    const { instruments, useCase } = harness([deposit('100.00')]);
+    instruments.close = '33.3300';
+
+    const result = await useCase.execute(
+      marketCommand({ kind: 'QUANTITY', quantity: ShareQuantity.of(1n) }),
+    );
+
+    expect(result.status).toBe('FILLED');
+    expect(result.price).toBe('33.33');
+    expect(result.size).toBe('1');
+  });
+
   it('derives the share quantity from the amount using the close', async () => {
     const { instruments, orders, useCase } = harness([deposit('100.00')]);
-    instruments.close = price('33.33');
+    instruments.close = '33.33';
 
     const result = await useCase.execute(
       marketCommand({ kind: 'AMOUNT', amount: Money.parse('100.00') }),
