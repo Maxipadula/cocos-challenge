@@ -9,6 +9,7 @@ import { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
 import { SearchInstruments } from '#instruments/application/use-cases/search-instruments.js';
 import { AccountNotFoundError } from '#orders/application/errors/account-not-found.error.js';
 import { CancelTradeOrder } from '#orders/application/use-cases/cancel-trade-order.js';
+import { SubmitCashMovement } from '#orders/application/use-cases/submit-cash-movement.js';
 import {
   InstrumentNotFoundError,
   InstrumentNotTradableError,
@@ -34,6 +35,7 @@ describe('HTTP presentation with simulated use cases', () => {
   const portfolio = vi.fn();
   const submit = vi.fn();
   const cancel = vi.fn();
+  const cash = vi.fn();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -53,6 +55,8 @@ describe('HTTP presentation with simulated use cases', () => {
       .useValue({ execute: submit })
       .overrideProvider(CancelTradeOrder)
       .useValue({ execute: cancel })
+      .overrideProvider(SubmitCashMovement)
+      .useValue({ execute: cash })
       .compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -344,14 +348,45 @@ describe('HTTP presentation with simulated use cases', () => {
     expect((await rejected.json()).status).toBe('REJECTED');
   });
 
-  it('does not expose a cash movement endpoint', async () => {
-    const response = await fetch(`${baseUrl}/cash-movements`, {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ amount: '10' }),
+  it('records a cash movement and rejects unknown fields', async () => {
+    cash.mockResolvedValueOnce({
+      id: order,
+      accountId: '00000000-0000-4000-8000-000000000003',
+      instrumentId: instrument,
+      side: 'CASH_OUT',
+      status: 'REJECTED',
+      amount: '600',
+      rejectionReason: 'INSUFFICIENT_CASH',
+      placedAt: '2026-01-15T15:00:00.000Z',
     });
 
-    expect(response.status).toBe(404);
+    const rejected = await fetch(`${baseUrl}/cash-movements`, {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ side: 'CASH_OUT', amount: '600.00' }),
+    });
+    const extra = await fetch(`${baseUrl}/cash-movements`, {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        side: 'CASH_IN',
+        amount: '10.00',
+        instrumentId: instrument,
+      }),
+    });
+
+    expect(rejected.status).toBe(201);
+    expect(await rejected.json()).toMatchObject({
+      status: 'REJECTED',
+      rejectionReason: 'INSUFFICIENT_CASH',
+    });
+    expect(cash).toHaveBeenCalledWith({
+      userId: user,
+      side: 'CASH_OUT',
+      amount: '600.00',
+      idempotencyKey: 'order-key',
+    });
+    expect(extra.status).toBe(400);
   });
 });
 

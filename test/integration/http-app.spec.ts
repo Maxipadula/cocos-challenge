@@ -369,6 +369,106 @@ describeWithLocalDatabase('HTTP application against PostgreSQL', () => {
     );
   });
 
+  it('records deposits and withdrawals through the real application', async () => {
+    const trader = await createTrader({});
+    const server = app.getHttpServer();
+    const depositKey = idempotencyKey();
+    const deposit = await request(server)
+      .post('/cash-movements')
+      .set(headers(trader.userId, depositKey))
+      .send({ side: 'CASH_IN', amount: '1000.00' });
+    const replay = await request(server)
+      .post('/cash-movements')
+      .set(headers(trader.userId, depositKey))
+      .send({ side: 'CASH_IN', amount: '1000.00' });
+    const conflict = await request(server)
+      .post('/cash-movements')
+      .set(headers(trader.userId, depositKey))
+      .send({ side: 'CASH_OUT', amount: '10.00' });
+
+    expect(deposit.status).toBe(201);
+    expect(deposit.body).toMatchObject({
+      side: 'CASH_IN',
+      status: 'FILLED',
+      amount: '1000',
+      rejectionReason: null,
+    });
+    expect(replay.body.id).toBe(deposit.body.id);
+    expect(conflict.status).toBe(409);
+
+    const stored = await prisma.order.findUniqueOrThrow({
+      where: { id: deposit.body.id },
+    });
+
+    expect(stored.side).toBe('CASH_IN');
+    expect(stored.status).toBe('FILLED');
+    expect(stored.type).toBeNull();
+    expect(stored.price).toBeNull();
+    expect(stored.instrumentId).toBe(arsId);
+    expect(stored.size.equals('1000')).toBe(true);
+
+    const reserved = await request(server)
+      .post('/orders')
+      .set(headers(trader.userId, idempotencyKey()))
+      .send({
+        instrumentId: trader.instrumentId,
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '6',
+        limitPrice: '100.00',
+      });
+    const rejected = await request(server)
+      .post('/cash-movements')
+      .set(headers(trader.userId, idempotencyKey()))
+      .send({ side: 'CASH_OUT', amount: '500.00' });
+    const afterRejection = await request(server)
+      .get('/portfolio')
+      .set('X-User-Id', trader.userId);
+
+    expect(reserved.status).toBe(201);
+    expect(rejected.status).toBe(201);
+    expect(rejected.body).toMatchObject({
+      side: 'CASH_OUT',
+      status: 'REJECTED',
+      rejectionReason: 'INSUFFICIENT_CASH',
+    });
+    expect(sameMoney(afterRejection.body.settledCash, '1000')).toBe(true);
+    expect(sameMoney(afterRejection.body.reservedCash, '600')).toBe(true);
+    expect(sameMoney(afterRejection.body.availableCash, '400')).toBe(true);
+    expect(sameMoney(afterRejection.body.totalValue, '1000')).toBe(true);
+    expect(afterRejection.body.positions).toEqual([]);
+
+    const withdrawal = await request(server)
+      .post('/cash-movements')
+      .set(headers(trader.userId, idempotencyKey()))
+      .send({ side: 'CASH_OUT', amount: '400.00' });
+    const afterWithdrawal = await request(server)
+      .get('/portfolio')
+      .set('X-User-Id', trader.userId);
+    const rejectedRow = await prisma.order.findUniqueOrThrow({
+      where: { id: rejected.body.id },
+    });
+
+    expect(withdrawal.status).toBe(201);
+    expect(withdrawal.body.status).toBe('FILLED');
+    expect(rejectedRow.price).toBeNull();
+    expect(rejectedRow.type).toBeNull();
+    expect(sameMoney(afterWithdrawal.body.settledCash, '600')).toBe(true);
+    expect(sameMoney(afterWithdrawal.body.reservedCash, '600')).toBe(true);
+    expect(sameMoney(afterWithdrawal.body.availableCash, '0')).toBe(true);
+    expect(sameMoney(afterWithdrawal.body.totalValue, '600')).toBe(true);
+    expect(
+      await prisma.order.count({
+        where: { accountId: trader.accountId, side: 'CASH_IN' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.order.count({
+        where: { accountId: trader.accountId, side: 'CASH_OUT' },
+      }),
+    ).toBe(2);
+  });
+
   async function createTrader(input: { cash?: string; close?: string }) {
     const userId = randomUUID();
     const accountId = randomUUID();

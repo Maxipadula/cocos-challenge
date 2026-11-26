@@ -24,6 +24,7 @@ const STATUS_BY_ERROR_NAME: Record<string, number> = {
   InstrumentNotTradableError: HttpStatus.UNPROCESSABLE_ENTITY,
   MarketPriceUnavailableError: HttpStatus.UNPROCESSABLE_ENTITY,
   IdempotencyConflictError: HttpStatus.CONFLICT,
+  CashCurrencyUnavailableError: HttpStatus.INTERNAL_SERVER_ERROR,
   PortfolioInstrumentMissingError: HttpStatus.INTERNAL_SERVER_ERROR,
   PortfolioCurrencyPositionError: HttpStatus.INTERNAL_SERVER_ERROR,
 };

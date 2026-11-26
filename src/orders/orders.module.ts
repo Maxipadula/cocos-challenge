@@ -19,11 +19,12 @@ import { PrismaAccountLock } from './infrastructure/prisma/prisma-account-lock.j
 import { PrismaAccountRepository } from './infrastructure/prisma/prisma-account-repository.js';
 import { PrismaOrderRepository } from './infrastructure/prisma/prisma-order-repository.js';
 import { PrismaOrdersPortfolioData } from './infrastructure/prisma/prisma-orders-portfolio-data.js';
+import { CashMovementsController } from './presentation/cash-movements.controller.js';
 import { OrdersController } from './presentation/orders.controller.js';
 
 @Module({
   imports: [SharedModule, InstrumentsModule],
-  controllers: [OrdersController],
+  controllers: [OrdersController, CashMovementsController],
   providers: [
     PrismaAccountLock,
     { provide: AccountLock, useExisting: PrismaAccountLock },

@@ -47,7 +47,7 @@ export default tseslint.config(
             },
             { pattern: '#shared/**', group: 'internal' },
             {
-              pattern: '#{instruments,orders,portfolio}/**',
+              pattern: '#{docs,instruments,orders,portfolio}/**',
               group: 'unknown',
             },
           ],

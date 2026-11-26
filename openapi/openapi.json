@@ -1,0 +1,938 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/orders": {
+      "post": {
+        "description": "MARKET orders are filled immediately at the latest close, or stored as REJECTED when available cash or shares are insufficient. Accepted LIMIT orders stay NEW and reserve the cash (BUY) or the shares (SELL). A rejected order is still persisted and this endpoint returns 201. There is no LIMIT execution or matching, and no cash-movement endpoint.",
+        "operationId": "OrdersController_submit",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Opaque client key, up to 255 characters. The same key and the same request return the stored result. The same key with a different request returns 409.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "description": "UUID of the user who owns the account. There is no authentication.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1000000-0000-4000-8000-000000000001",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitOrderDto"
+              },
+              "examples": {
+                "marketBuy": {
+                  "summary": "MARKET BUY by quantity",
+                  "value": {
+                    "instrumentId": "a3000000-0000-4000-8000-000000000022",
+                    "side": "BUY",
+                    "type": "MARKET",
+                    "quantity": "2"
+                  }
+                },
+                "marketSell": {
+                  "summary": "MARKET SELL by quantity",
+                  "value": {
+                    "instrumentId": "a3000000-0000-4000-8000-000000000022",
+                    "side": "SELL",
+                    "type": "MARKET",
+                    "quantity": "2"
+                  }
+                },
+                "limitBuy": {
+                  "summary": "LIMIT BUY by amount",
+                  "value": {
+                    "instrumentId": "a3000000-0000-4000-8000-000000000022",
+                    "side": "BUY",
+                    "type": "LIMIT",
+                    "amount": "1000.00",
+                    "limitPrice": "100.00"
+                  }
+                },
+                "limitSell": {
+                  "summary": "LIMIT SELL by quantity",
+                  "value": {
+                    "instrumentId": "a3000000-0000-4000-8000-000000000022",
+                    "side": "SELL",
+                    "type": "LIMIT",
+                    "quantity": "4",
+                    "limitPrice": "100.00"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The order was stored. status is FILLED for an accepted market order, NEW for an accepted limit order, and REJECTED when funds or shares are insufficient.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedOrderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body or headers are invalid, quantity and amount are both present or both absent, the amount cannot buy one share, or a decimal is not persistable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The user has no investment account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Investment account was not found."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key was reused with a different request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Idempotency key was reused with a different request."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The instrument does not exist, it is a currency, or a MARKET order has no latest close.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Submit a trade order",
+        "tags": [
+          "orders"
+        ],
+        "x-postman-test": "const body = pm.response.json();\nif (body && body.id) {\n  pm.collectionVariables.set('orderId', body.id);\n}",
+        "x-postman-prerequest": "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+      }
+    },
+    "/orders/{orderId}/cancel": {
+      "post": {
+        "description": "Cancels a LIMIT order that is still NEW and releases the cash or shares it reserved. Replaying the same Idempotency-Key returns the stored cancellation. A different key for an order that is no longer NEW returns 409 and does not release the reservation again.",
+        "operationId": "OrdersController_cancel",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Opaque client key, up to 255 characters. The same key and the same request return the stored result. The same key with a different request returns 409.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "description": "UUID of the user who owns the account. There is no authentication.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1000000-0000-4000-8000-000000000001",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelledOrderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "orderId or a required header is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The order does not exist for this account, or the user has no account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Order was not found."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The order is not a LIMIT order in status NEW, or Idempotency-Key was reused with a different order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Only a new limit order can be cancelled."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cancel a new limit order",
+        "tags": [
+          "orders"
+        ],
+        "x-postman-prerequest": "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+      }
+    },
+    "/cash-movements": {
+      "post": {
+        "description": "CASH_IN is stored as FILLED and increases settled cash. CASH_OUT is stored as FILLED when the amount fits in available cash, or as REJECTED with INSUFFICIENT_CASH when it does not. Reserved cash cannot be withdrawn. A rejected withdrawal is still persisted and this endpoint returns 201. The ARS instrument is chosen by the server.",
+        "operationId": "CashMovementsController_submit",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Opaque client key, up to 255 characters. The same key and the same request return the stored result. The same key with a different request returns 409.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "description": "UUID of the user who owns the account. There is no authentication.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1000000-0000-4000-8000-000000000001",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitCashMovementDto"
+              },
+              "examples": {
+                "cashIn": {
+                  "summary": "Deposit",
+                  "value": {
+                    "side": "CASH_IN",
+                    "amount": "1500.50"
+                  }
+                },
+                "cashOut": {
+                  "summary": "Withdrawal",
+                  "value": {
+                    "side": "CASH_OUT",
+                    "amount": "500.00"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The movement was stored. status is FILLED when it settled, and REJECTED when a withdrawal exceeds available cash.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedCashMovementResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body or headers are invalid, the amount is not a positive decimal string, or an unknown field was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The user has no investment account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Investment account was not found."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key was reused with a different request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Idempotency key was reused with a different request."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The ARS currency instrument is missing, or another unexpected error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Record a cash deposit or withdrawal",
+        "tags": [
+          "cash-movements"
+        ],
+        "x-postman-prerequest": "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+      }
+    },
+    "/instruments": {
+      "get": {
+        "description": "Returns instruments whose ticker or name matches the term. Currency instruments (type MONEDA) are excluded. The term is trimmed and lowercased before the search.",
+        "operationId": "InstrumentsController_search",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Ticker or name fragment. It is trimmed and lowercased. Empty values and terms longer than 64 characters are rejected.",
+            "schema": {
+              "example": "ggal",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of instruments to return. Defaults to 20.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InstrumentResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is missing, empty, longer than 64 characters, the limit is outside 1–50, or an unknown query field was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search instruments",
+        "tags": [
+          "instruments"
+        ],
+        "x-postman-test": "const body = pm.response.json();\nif (Array.isArray(body) && body[0] && body[0].id) {\n  pm.collectionVariables.set('instrumentId', body[0].id);\n}"
+      }
+    },
+    "/portfolio": {
+      "get": {
+        "description": "Returns settled cash, reserved cash, available cash, total value, and share positions for the account of X-User-Id. Reservations are not subtracted from the total. Cash movements are not returned as positions.",
+        "operationId": "PortfolioController_show",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "description": "UUID of the user whose account is read. There is no authentication.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "a1000000-0000-4000-8000-000000000001",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "X-User-Id is missing or is not a UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The user has no investment account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                },
+                "example": {
+                  "message": "Portfolio account was not found."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A position references a missing instrument or a currency instrument, or another unexpected error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorMessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read a portfolio",
+        "tags": [
+          "portfolio"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Cocos API",
+    "description": "HTTP API for searching instruments, reading a portfolio, submitting trade orders, and cancelling a new limit order.\n\nCallers are identified by the X-User-Id header. There is no authentication.\nWrite operations require an Idempotency-Key header. Repeating the same key and the same request returns the stored result. The same key with a different request returns 409.\n\nMARKET orders execute immediately at the latest close and are stored as FILLED, or as REJECTED when the available cash or shares are insufficient. Rejected orders are persisted.\nLIMIT orders that pass the same availability check are stored as NEW and reserve cash (BUY) or shares (SELL). They are not executed and there is no matching engine.\nOnly a LIMIT order in status NEW can be cancelled. Cancelling releases exactly that reservation.\n\nAmounts and quantities are decimal or integer strings. The API does not accept JSON numbers for them.\nPOST /cash-movements records a deposit or a withdrawal against the ARS instrument. The client does not send an instrument id, a price, or an order type.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "SubmitOrderDto": {
+        "type": "object",
+        "properties": {
+          "instrumentId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a3000000-0000-4000-8000-000000000022",
+            "description": "Instrument to trade. Currency instruments are rejected. Provide either quantity or amount, and only one of them. MARKET rejects limitPrice. LIMIT requires limitPrice."
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MARKET",
+              "LIMIT"
+            ],
+            "description": "MARKET executes immediately at the latest close. LIMIT stays NEW until it is cancelled. There is no matching."
+          },
+          "quantity": {
+            "type": "string",
+            "example": "2",
+            "description": "Whole number of shares, as a string. Mutually exclusive with amount."
+          },
+          "amount": {
+            "type": "string",
+            "example": "1000.00",
+            "description": "Cash amount, as a decimal string. The order size is the floor of amount divided by the price. Mutually exclusive with quantity."
+          },
+          "limitPrice": {
+            "type": "string",
+            "example": "100.00",
+            "description": "Required for LIMIT and forbidden for MARKET. Decimal string."
+          }
+        },
+        "required": [
+          "instrumentId",
+          "side",
+          "type"
+        ]
+      },
+      "SubmittedOrderResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instrumentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MARKET",
+              "LIMIT"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "FILLED",
+              "REJECTED"
+            ],
+            "description": "MARKET orders are FILLED or REJECTED immediately. Accepted LIMIT orders stay NEW. There is no LIMIT execution or matching."
+          },
+          "size": {
+            "type": "string",
+            "example": "2",
+            "description": "Whole shares. When the request sends an amount, this is the floor of amount divided by the price. The unused remainder is not reserved."
+          },
+          "price": {
+            "type": "string",
+            "example": "100.50",
+            "description": "MARKET uses the latest close. LIMIT uses the submitted limit price."
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "INSUFFICIENT_CASH",
+              "INSUFFICIENT_SHARES"
+            ],
+            "example": null
+          },
+          "placedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "instrumentId",
+          "side",
+          "type",
+          "status",
+          "size",
+          "price",
+          "rejectionReason",
+          "placedAt"
+        ]
+      },
+      "ErrorMessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Order was not found."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "CancelledOrderResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instrumentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "LIMIT"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CANCELLED"
+            ]
+          },
+          "size": {
+            "type": "string",
+            "example": "10"
+          },
+          "price": {
+            "type": "string",
+            "example": "100"
+          },
+          "placedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "instrumentId",
+          "side",
+          "type",
+          "status",
+          "size",
+          "price",
+          "placedAt"
+        ]
+      },
+      "SubmitCashMovementDto": {
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": [
+              "CASH_IN",
+              "CASH_OUT"
+            ],
+            "description": "CASH_IN is a deposit. CASH_OUT is a withdrawal checked against available cash, not settled cash."
+          },
+          "amount": {
+            "type": "string",
+            "example": "1500.50",
+            "description": "Amount as a decimal string. The ARS instrument is resolved by the server."
+          }
+        },
+        "required": [
+          "side",
+          "amount"
+        ]
+      },
+      "SubmittedCashMovementResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instrumentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ARS currency instrument resolved by the server."
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "CASH_IN",
+              "CASH_OUT"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "FILLED",
+              "REJECTED"
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "example": "1500.50"
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "INSUFFICIENT_CASH"
+            ],
+            "example": null,
+            "description": "INSUFFICIENT_CASH when a withdrawal exceeds available cash. Otherwise null."
+          },
+          "placedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "instrumentId",
+          "side",
+          "status",
+          "amount",
+          "rejectionReason",
+          "placedAt"
+        ]
+      },
+      "InstrumentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a3000000-0000-4000-8000-000000000022"
+          },
+          "ticker": {
+            "type": "string",
+            "example": "GGAL"
+          },
+          "name": {
+            "type": "string",
+            "example": "Grupo Financiero Galicia"
+          },
+          "type": {
+            "type": "string",
+            "example": "ACCIONES",
+            "description": "Instrument type stored in the database. Currency instruments are excluded from search."
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "name",
+          "type"
+        ]
+      },
+      "PortfolioPositionResponse": {
+        "type": "object",
+        "properties": {
+          "instrumentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticker": {
+            "type": "string",
+            "example": "PAMP"
+          },
+          "name": {
+            "type": "string",
+            "example": "Pampa Holding S.A."
+          },
+          "quantity": {
+            "type": "string",
+            "example": "40",
+            "description": "Settled share quantity. It can be negative. Zero is shown when the instrument only has a reservation."
+          },
+          "reservedQuantity": {
+            "type": "string",
+            "example": "0"
+          },
+          "availableQuantity": {
+            "type": "string",
+            "example": "40",
+            "description": "Settled quantity minus reserved quantity, never below zero."
+          },
+          "close": {
+            "type": "string",
+            "nullable": true,
+            "example": "925.85",
+            "description": "Latest close. Null when the instrument has no quote."
+          },
+          "marketValue": {
+            "type": "string",
+            "nullable": true,
+            "example": "37034.00",
+            "description": "Settled quantity multiplied by the latest close. Reserved shares stay inside the position."
+          },
+          "dailyReturnPercentage": {
+            "type": "string",
+            "nullable": true,
+            "example": "1.5000",
+            "description": "Daily move from previousClose to close, with four decimal places. Null when previousClose is zero or the quote is missing."
+          }
+        },
+        "required": [
+          "instrumentId",
+          "ticker",
+          "name",
+          "quantity",
+          "reservedQuantity",
+          "availableQuantity",
+          "close",
+          "marketValue",
+          "dailyReturnPercentage"
+        ]
+      },
+      "PortfolioResponse": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "settledCash": {
+            "type": "string",
+            "example": "783800",
+            "description": "Cash settled by filled orders and cash movements."
+          },
+          "reservedCash": {
+            "type": "string",
+            "example": "125500",
+            "description": "Cash reserved by accepted BUY LIMIT orders that are still NEW."
+          },
+          "availableCash": {
+            "type": "string",
+            "example": "658300",
+            "description": "Settled cash minus reserved cash. It can be negative when reserves exceed settled cash."
+          },
+          "totalValue": {
+            "type": "string",
+            "nullable": true,
+            "example": "890500",
+            "description": "Settled cash plus the market value of settled share quantities. Reservations are not subtracted. Null when any position has no quote."
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortfolioPositionResponse"
+            }
+          }
+        },
+        "required": [
+          "accountId",
+          "settledCash",
+          "reservedCash",
+          "availableCash",
+          "totalValue",
+          "positions"
+        ]
+      }
+    }
+  }
+}

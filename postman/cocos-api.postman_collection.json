@@ -1,0 +1,367 @@
+{
+  "info": {
+    "name": "Cocos API",
+    "description": "HTTP API for searching instruments, reading a portfolio, submitting trade orders, and cancelling a new limit order.\n\nCallers are identified by the X-User-Id header. There is no authentication.\nWrite operations require an Idempotency-Key header. Repeating the same key and the same request returns the stored result. The same key with a different request returns 409.\n\nMARKET orders execute immediately at the latest close and are stored as FILLED, or as REJECTED when the available cash or shares are insufficient. Rejected orders are persisted.\nLIMIT orders that pass the same availability check are stored as NEW and reserve cash (BUY) or shares (SELL). They are not executed and there is no matching engine.\nOnly a LIMIT order in status NEW can be cancelled. Cancelling releases exactly that reservation.\n\nAmounts and quantities are decimal or integer strings. The API does not accept JSON numbers for them.\nPOST /cash-movements records a deposit or a withdrawal against the ARS instrument. The client does not send an instrument id, a price, or an order type.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Search instruments",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/instruments?q=ggal",
+        "description": "Returns instruments whose ticker or name matches the term. Currency instruments (type MONEDA) are excluded. The term is trimmed and lowercased before the search."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (Array.isArray(body) && body[0] && body[0].id) {",
+              "  pm.collectionVariables.set('instrumentId', body[0].id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Read a portfolio",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/portfolio",
+        "description": "Returns settled cash, reserved cash, available cash, total value, and share positions for the account of X-User-Id. Reservations are not subtracted from the total. Cash movements are not returned as positions."
+      }
+    },
+    {
+      "name": "MARKET BUY by quantity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "description": "MARKET orders are filled immediately at the latest close, or stored as REJECTED when available cash or shares are insufficient. Accepted LIMIT orders stay NEW and reserve the cash (BUY) or the shares (SELL). A rejected order is still persisted and this endpoint returns 201. There is no LIMIT execution or matching, and no cash-movement endpoint.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrumentId\": \"{{instrumentId}}\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": \"2\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.id) {",
+              "  pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "MARKET SELL by quantity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "description": "MARKET orders are filled immediately at the latest close, or stored as REJECTED when available cash or shares are insufficient. Accepted LIMIT orders stay NEW and reserve the cash (BUY) or the shares (SELL). A rejected order is still persisted and this endpoint returns 201. There is no LIMIT execution or matching, and no cash-movement endpoint.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrumentId\": \"{{instrumentId}}\",\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": \"2\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.id) {",
+              "  pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "LIMIT BUY by amount",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "description": "MARKET orders are filled immediately at the latest close, or stored as REJECTED when available cash or shares are insufficient. Accepted LIMIT orders stay NEW and reserve the cash (BUY) or the shares (SELL). A rejected order is still persisted and this endpoint returns 201. There is no LIMIT execution or matching, and no cash-movement endpoint.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrumentId\": \"{{instrumentId}}\",\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"amount\": \"1000.00\",\n  \"limitPrice\": \"100.00\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.id) {",
+              "  pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "LIMIT SELL by quantity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "description": "MARKET orders are filled immediately at the latest close, or stored as REJECTED when available cash or shares are insufficient. Accepted LIMIT orders stay NEW and reserve the cash (BUY) or the shares (SELL). A rejected order is still persisted and this endpoint returns 201. There is no LIMIT execution or matching, and no cash-movement endpoint.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instrumentId\": \"{{instrumentId}}\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": \"4\",\n  \"limitPrice\": \"100.00\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.id) {",
+              "  pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cancel a new limit order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders/{{orderId}}/cancel",
+        "description": "Cancels a LIMIT order that is still NEW and releases the cash or shares it reserved. Replaying the same Idempotency-Key returns the stored cancellation. A different key for an order that is no longer NEW returns 409 and does not release the reservation again."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deposit",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/cash-movements",
+        "description": "CASH_IN is stored as FILLED and increases settled cash. CASH_OUT is stored as FILLED when the amount fits in available cash, or as REJECTED with INSUFFICIENT_CASH when it does not. Reserved cash cannot be withdrawn. A rejected withdrawal is still persisted and this endpoint returns 201. The ARS instrument is chosen by the server.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"side\": \"CASH_IN\",\n  \"amount\": \"1500.50\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Withdrawal",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotencyKey}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/cash-movements",
+        "description": "CASH_IN is stored as FILLED and increases settled cash. CASH_OUT is stored as FILLED when the amount fits in available cash, or as REJECTED with INSUFFICIENT_CASH when it does not. Reserved cash cannot be withdrawn. A rejected withdrawal is still persisted and this endpoint returns 201. The ARS instrument is chosen by the server.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"side\": \"CASH_OUT\",\n  \"amount\": \"500.00\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "userId",
+      "value": "a1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "key": "instrumentId",
+      "value": "a3000000-0000-4000-8000-000000000022"
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "idempotencyKey",
+      "value": ""
+    }
+  ]
+}

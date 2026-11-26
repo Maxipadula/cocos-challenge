@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsIn,
   IsOptional,
@@ -27,16 +28,32 @@ class SubmitOrderShape implements ValidatorConstraintInterface {
 }
 
 export class SubmitOrderDto {
+  @ApiProperty({
+    format: 'uuid',
+    example: 'a3000000-0000-4000-8000-000000000022',
+    description:
+      'Instrument to trade. Currency instruments are rejected. Provide either quantity or amount, and only one of them. MARKET rejects limitPrice. LIMIT requires limitPrice.',
+  })
   @Validate(SubmitOrderShape)
   @IsUUID('all')
   instrumentId: string;
 
+  @ApiProperty({ enum: ['BUY', 'SELL'] })
   @IsIn(['BUY', 'SELL'])
   side: 'BUY' | 'SELL';
 
+  @ApiProperty({
+    enum: ['MARKET', 'LIMIT'],
+    description:
+      'MARKET executes immediately at the latest close. LIMIT stays NEW until it is cancelled. There is no matching.',
+  })
   @IsIn(['MARKET', 'LIMIT'])
   type: 'MARKET' | 'LIMIT';
 
+  @ApiPropertyOptional({
+    example: '2',
+    description: 'Whole number of shares, as a string. Mutually exclusive with amount.',
+  })
   @IsOptional()
   @IsString()
   @Matches(WHOLE_SHARES, {
@@ -44,11 +61,20 @@ export class SubmitOrderDto {
   })
   quantity?: string;
 
+  @ApiPropertyOptional({
+    example: '1000.00',
+    description:
+      'Cash amount, as a decimal string. The order size is the floor of amount divided by the price. Mutually exclusive with quantity.',
+  })
   @IsOptional()
   @IsString()
   @Matches(DECIMAL, { message: 'amount must be a decimal string.' })
   amount?: string;
 
+  @ApiPropertyOptional({
+    example: '100.00',
+    description: 'Required for LIMIT and forbidden for MARKET. Decimal string.',
+  })
   @IsOptional()
   @IsString()
   @Matches(DECIMAL, { message: 'limitPrice must be a decimal string.' })
