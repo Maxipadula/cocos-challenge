@@ -6,9 +6,9 @@ import { resolvePrismaClient } from '#shared/infrastructure/prisma/prisma-transa
 import { PrismaUnitOfWork } from '#shared/infrastructure/prisma/prisma-unit-of-work.js';
 import { PrismaService } from '#shared/infrastructure/prisma/prisma.service.js';
 
-const describeWithDatabase = process.env.DATABASE_URL
-  ? describe
-  : describe.skip;
+const databaseUrl = process.env.DATABASE_URL;
+const describeWithDatabase =
+  databaseUrl && isLocalDatabase(databaseUrl) ? describe : describe.skip;
 
 describeWithDatabase('PrismaUnitOfWork against PostgreSQL', () => {
   let prisma: PrismaService;
@@ -39,3 +39,9 @@ describeWithDatabase('PrismaUnitOfWork against PostgreSQL', () => {
     ).rejects.toThrow();
   });
 });
+
+function isLocalDatabase(connectionString: string): boolean {
+  const host = new URL(connectionString).hostname;
+
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}

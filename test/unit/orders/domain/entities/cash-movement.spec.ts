@@ -8,7 +8,6 @@ import {
   InvalidCashMovementError,
   NonPositiveAmountError,
 } from '#orders/domain/errors/order-errors.js';
-import { availableCash } from '#orders/domain/services/availability.js';
 
 import { identity, peso } from '../order-fixture.js';
 
@@ -35,14 +34,19 @@ describe('CashMovement', () => {
     const deposit = CashMovement.cashIn(cash(1, '100.00'));
     const movement = CashMovement.cashOut({
       ...cash(2, '40.50'),
-      availableCash: availableCash([deposit]),
+      availableCash: deposit.settledCashDelta(),
     });
 
     expect(movement.side).toBe('CASH_OUT');
     expect(movement.cashStatus).toBe('FILLED');
     expect(movement.rejectionReason).toBeNull();
     expect(movement.settledCashDelta().toDecimalString()).toBe('-40.50');
-    expect(availableCash([deposit, movement]).toDecimalString()).toBe('59.50');
+    expect(
+      deposit
+        .settledCashDelta()
+        .add(movement.settledCashDelta())
+        .toDecimalString(),
+    ).toBe('59.50');
   });
 
   it('fills a cash out for the exact available amount, including a different scale', () => {
@@ -59,14 +63,19 @@ describe('CashMovement', () => {
     const deposit = CashMovement.cashIn(cash(1, '80.00'));
     const movement = CashMovement.cashOut({
       ...cash(2, '80.01'),
-      availableCash: availableCash([deposit]),
+      availableCash: deposit.settledCashDelta(),
     });
 
     expect(movement.cashStatus).toBe('REJECTED');
     expect(movement.rejectionReason).toBe('INSUFFICIENT_CASH');
     expect(movement.settledCashDelta().isZero()).toBe(true);
     expect(movement.committedCash().isZero()).toBe(true);
-    expect(availableCash([deposit, movement]).toDecimalString()).toBe('80.00');
+    expect(
+      deposit
+        .settledCashDelta()
+        .add(movement.settledCashDelta())
+        .toDecimalString(),
+    ).toBe('80.00');
   });
 
   it('rejects a non-positive cash amount', () => {
@@ -92,9 +101,12 @@ describe('CashMovement', () => {
     });
 
     expect(overflow.toDecimalString()).toBe(`1${'0'.repeat(20)}`);
-    expect(availableCash([deposit, deposit]).toDecimalString()).toBe(
-      maximum.add(maximum).toDecimalString(),
-    );
+    expect(
+      deposit
+        .settledCashDelta()
+        .add(deposit.settledCashDelta())
+        .toDecimalString(),
+    ).toBe(maximum.add(maximum).toDecimalString());
     expect(() =>
       CashMovement.cashIn({ ...cash(2, '1.00'), amount: overflow }),
     ).toThrow(InvalidMoneyError);

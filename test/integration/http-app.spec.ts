@@ -178,6 +178,12 @@ describeWithLocalDatabase('HTTP application against PostgreSQL', () => {
       .post('/orders')
       .set(headers(trader.userId, marketKey))
       .send(marketBody);
+    const stored = await prisma.order.findUniqueOrThrow({
+      where: { id: filled.body.id },
+    });
+    const afterFill = await request(server)
+      .get('/portfolio')
+      .set('X-User-Id', trader.userId);
     const replay = await request(server)
       .post('/orders')
       .set(headers(trader.userId, marketKey))
@@ -215,6 +221,33 @@ describeWithLocalDatabase('HTTP application against PostgreSQL', () => {
       size: '2',
     });
     expect(sameMoney(filled.body.price, '100.50')).toBe(true);
+    expect(stored.status).toBe('FILLED');
+    expect(stored.side).toBe('BUY');
+    expect(stored.type).toBe('MARKET');
+    expect(stored.rejectionReason).toBeNull();
+    expect(stored.size.equals('2')).toBe(true);
+    expect(stored.price?.equals('100.50')).toBe(true);
+    expect(afterFill.status).toBe(200);
+    expect(sameMoney(afterFill.body.settledCash, '999799')).toBe(true);
+    expect(sameMoney(afterFill.body.reservedCash, '0')).toBe(true);
+    expect(sameMoney(afterFill.body.availableCash, '999799')).toBe(true);
+    expect(sameMoney(afterFill.body.totalValue, '1000000')).toBe(true);
+    expect(afterFill.body.positions).toEqual([
+      expect.objectContaining({
+        instrumentId: trader.instrumentId,
+        quantity: '2',
+        reservedQuantity: '0',
+        availableQuantity: '2',
+      }),
+    ]);
+    expect(sameMoney(afterFill.body.positions[0].marketValue, '201')).toBe(
+      true,
+    );
+    expect(
+      await prisma.accountReservedPosition.count({
+        where: { accountId: trader.accountId },
+      }),
+    ).toBe(0);
     expect(replay.status).toBe(201);
     expect(replay.body.id).toBe(filled.body.id);
     expect(conflict.status).toBe(409);
