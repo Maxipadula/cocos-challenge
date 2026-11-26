@@ -60,7 +60,13 @@ Convención del proyecto. Todavía no hay una regla de ESLint que la imponga.
 
 `PrismaModule` registra `PrismaUnitOfWork` bajo el token `UnitOfWork`. Los casos de uso futuros inyectan `UnitOfWork`, no la clase de Prisma.
 
-`resolvePrismaClient()` vive en infrastructure. Dentro de `UnitOfWork.run` devuelve el cliente de la transacción interactiva. Fuera de ella devuelve `PrismaService`. Los repositorios, cuando existan, tienen que consultar por ese cliente para participar de la transacción.
+`PrismaService` abre la conexión y las transacciones. Permanece como proveedor interno de `PrismaModule` y no se exporta. Los repositorios no lo inyectan.
+
+`PrismaClientProvider` es el acceso de los repositorios al cliente:
+
+- `getClient()` sirve para consultas que pueden ejecutarse fuera de una transacción. Si hay una transacción activa, devuelve ese cliente. Si no hay, devuelve `PrismaService`.
+- `getTransactionClient()` sirve para escrituras y para `SELECT … FOR UPDATE`. Devuelve solo el cliente transaccional. Si no hay una transacción activa, lanza `ActiveTransactionRequiredError` y no cae al cliente raíz.
+- Toda operación que modifica información usa `getTransactionClient()` dentro de `UnitOfWork.run`.
 
 ## Estrategia de transacciones
 
