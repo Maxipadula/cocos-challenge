@@ -137,6 +137,14 @@ class MemoryOrders extends OrderRepository {
     this.addedDuringTransaction = this.unitOfWork.active;
     this.added.push(order);
   }
+
+  override async findTradeForUpdate(): Promise<TradeOrder | null> {
+    throw new Error('SubmitTradeOrder does not lock an existing order.');
+  }
+
+  override async update(): Promise<void> {
+    throw new Error('SubmitTradeOrder does not update an order.');
+  }
 }
 
 class MemoryInstruments extends InstrumentQueries {
