@@ -102,7 +102,9 @@ export class PrismaInstrumentQueries extends InstrumentQueries {
   override async latestMarketDataFor(
     ids: readonly Uuid[],
   ): Promise<readonly MarketDataQuote[]> {
-    if (ids.length === 0) {
+    const uniqueIds = [...new Set(ids)];
+
+    if (uniqueIds.length === 0) {
       return [];
     }
 
@@ -112,7 +114,7 @@ export class PrismaInstrumentQueries extends InstrumentQueries {
         md.close,
         md.previous_close,
         md.observed_at
-      FROM unnest(${[...ids]}::uuid[]) AS requested(id)
+      FROM unnest(${uniqueIds}::uuid[]) AS requested(id)
       JOIN LATERAL (
         SELECT instrument_id, close, previous_close, observed_at
         FROM market_data

@@ -218,4 +218,46 @@ describe('PrismaInstrumentQueries', () => {
     expect(sqlText(quotesSql)).toContain('LIMIT 1');
     expect(getTransactionClient).not.toHaveBeenCalled();
   });
+
+  it('asks once per instrument when latest quotes repeat ids', async () => {
+    const first = uuid('00000000-0000-4000-8000-000000000014');
+    const second = uuid('00000000-0000-4000-8000-000000000015');
+    const { queryRaw, queries } = createHarness();
+    queryRaw.mockResolvedValue([
+      {
+        instrument_id: first,
+        close: new Prisma.Decimal('10.50'),
+        previous_close: new Prisma.Decimal('10.00'),
+        observed_at: new Date('2026-01-16T00:00:00.000Z'),
+      },
+      {
+        instrument_id: second,
+        close: new Prisma.Decimal('20.00'),
+        previous_close: new Prisma.Decimal('19.00'),
+        observed_at: new Date('2026-01-16T00:00:00.000Z'),
+      },
+    ]);
+
+    const quotes = await queries.latestMarketDataFor([
+      first,
+      second,
+      first,
+      second,
+    ]);
+    const [, requestedIds] = queryRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      string[],
+    ];
+
+    expect(queryRaw).toHaveBeenCalledOnce();
+    expect(requestedIds).toEqual([first, second]);
+    expect(quotes.map((quote) => quote.instrumentId)).toEqual([first, second]);
+  });
+
+  it('does not query latest quotes for an empty id list', async () => {
+    const { queryRaw, queries } = createHarness();
+
+    await expect(queries.latestMarketDataFor([])).resolves.toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
 });

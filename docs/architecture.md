@@ -133,21 +133,22 @@ Comprobado contra Node.js 26.13.0:
 
 `DATABASE_URL` se lee desde el entorno. `.env.example` tiene valores locales de ejemplo, sin secretos personales. `.env` está en `.gitignore`. `main.ts` carga `.env` con `dotenv` si el archivo existe. Sin `DATABASE_URL`, `PrismaService` no arranca. `prisma.config.ts` carga ese mismo archivo y, si la variable no está, usa un placeholder solo para que `prisma generate` pueda ejecutarse. `prisma migrate deploy` tiene que correr con el `DATABASE_URL` real del `.env`.
 
-PostgreSQL local está descrito en `docker-compose.yml`: imagen oficial `postgres:17`, usuario, contraseña, base y puerto configurables, volumen `postgres_data` y healthcheck con `pg_isready`. El contenedor no fue levantado y la migración no fue aplicada.
+PostgreSQL local está descrito en `docker-compose.yml`: imagen oficial `postgres:17`, usuario, contraseña, base y puerto configurables, volumen `postgres_data` y healthcheck con `pg_isready`. El 26 de noviembre de 2026 no había un servidor escuchando en `127.0.0.1:5432`, así que no se pudo leer `_prisma_migrations` local. El repositorio tiene una sola migración, `20261126054100_init`, y ese archivo sigue siendo el camino de una base nueva.
 
-Para usarlo más adelante, copiar `.env.example` a `.env` y ejecutar:
+Desarrollo local, sin pasar por el esquema original:
 
 - `npm run db:up` levanta PostgreSQL.
 - `npm run db:down` lo detiene y conserva el volumen.
 - `npm run db:migrate` aplica las migraciones versionadas con `prisma migrate deploy`.
 - `npm run db:migrate:status` consulta el estado de esas migraciones.
+- `npm run db:seed` carga la fixture adaptada. Exige `SEED_DEV=1`, que el script ya define, y un host local.
 - `npm run prisma:generate` regenera el cliente.
 
-No se usa `prisma db push`. La validación contra PostgreSQL queda para cuando existan los adaptadores: levantar la base desde cero, aplicar las migraciones, revisar constraints e índices, cargar el seed y correr los tests de integración, transacciones, rollback, idempotencia y concurrencia.
+La base remota que todavía tiene el esquema del challenge se transforma con `prisma/legacy-upgrade/`, fuera de `prisma/migrations`. El ensayo local usa otra base, `cocos_legacy_test`, mediante `npm run db:legacy:rehearse`. El procedimiento remoto es `npm run db:legacy:upgrade` y está descrito en `prisma/legacy-upgrade/README.md`. No se usa `prisma db push`.
 
 ## Persistencia
 
-El schema está en `prisma/schema.prisma`. La migración inicial está en `prisma/migrations/20261126054100_init`. No fue aplicada contra una base. Siguen pendientes el repositorio de órdenes y el seed.
+El schema está en `prisma/schema.prisma`. La migración inicial está en `prisma/migrations/20261126054100_init`. En este equipo no había PostgreSQL local para comprobar si esa migración ya estaba aplicada. El archivo no se modifica. El seed de desarrollo está en `src/seed`.
 
 `PrismaIdempotencyStore` lee con `getClient()` y escribe con `getTransactionClient()`. El id lo genera `UuidGenerator`. `createdAt` y `completedAt` se guardan juntos, porque la fila nace completa. Contra PostgreSQL todavía falta probar la inserción real, la lectura del JSON, el único `(user_id, idempotency_key)`, el rollback si falla la orden y el rollback si falla el guardado idempotente.
 

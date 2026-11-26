@@ -46,7 +46,10 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate deploy",
-    "db:migrate:status": "prisma migrate status"
+    "db:migrate:status": "prisma migrate status",
+    "db:seed": "npm run build && SEED_DEV=1 node dist/seed/development-seed.js",
+    "db:legacy:rehearse": "node scripts/legacy-rehearse.mjs",
+    "db:legacy:upgrade": "node scripts/legacy-upgrade.mjs"
   },
   "dependencies": {
     "@nestjs/common": "12.6.2",
