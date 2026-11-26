@@ -21,9 +21,9 @@ import type {
 import { OrderNotCancellableError } from '../../domain/errors/order-errors.js';
 import type { OrderId } from '../../domain/value-objects/order-id.js';
 import { ShareQuantity } from '../../domain/value-objects/share-quantity.js';
-import type { UserId } from '../../domain/value-objects/user-id.js';
+import type { AccountLock } from '../ports/account-lock.js';
 import type { OrderRepository } from '../ports/order-repository.js';
-import type { UserLock } from '../ports/user-lock.js';
+import type { UserId } from '../types/user-id.js';
 
 export const CANCEL_TRADE_ORDER = 'orders.cancel-trade';
 
@@ -44,7 +44,7 @@ export type CancelTradeOrderCommand = {
 
 export type CancelledTradeOrder = {
   readonly id: string;
-  readonly userId: string;
+  readonly accountId: string;
   readonly instrumentId: string;
   readonly side: TradeSide;
   readonly type: 'LIMIT';
@@ -63,7 +63,7 @@ export class CancelTradeOrder {
   constructor(
     private readonly idempotency: IdempotencyStore,
     private readonly unitOfWork: UnitOfWork,
-    private readonly userLock: UserLock,
+    private readonly accountLock: AccountLock,
     private readonly orders: OrderRepository,
   ) {}
 
@@ -89,7 +89,7 @@ export class CancelTradeOrder {
     command: CancelTradeOrderCommand,
     requestHash: string,
   ): Promise<CancelTradeOrderResult> {
-    await this.userLock.acquire(command.userId);
+    const accountId = await this.accountLock.acquireForUser(command.userId);
     const raced = resolveStored(
       await this.idempotency.find(command.userId, command.idempotencyKey),
       requestHash,
@@ -100,7 +100,7 @@ export class CancelTradeOrder {
     }
 
     const current = await this.orders.findTradeForUpdate(
-      command.userId,
+      accountId,
       command.orderId,
     );
     const result = await this.applyCancellation(current);
@@ -176,7 +176,7 @@ export function cancelTradeOrderRequestHash(
 function toCancelledTradeOrder(order: TradeOrder): CancelledTradeOrder {
   return {
     id: order.id,
-    userId: order.userId,
+    accountId: order.accountId,
     instrumentId: order.instrumentId,
     side: order.side,
     type: 'LIMIT',
@@ -196,6 +196,7 @@ export function cancelTradeOrderResultToJson(
 
   return {
     order: {
+      accountId: result.order.accountId,
       id: result.order.id,
       instrumentId: result.order.instrumentId,
       placedAt: result.order.placedAt,
@@ -204,7 +205,6 @@ export function cancelTradeOrderResultToJson(
       size: result.order.size,
       status: result.order.status,
       type: result.order.type,
-      userId: result.order.userId,
     },
     outcome: 'CANCELLED',
   };
@@ -235,7 +235,7 @@ export function cancelTradeOrderResultFromJson(
     outcome: 'CANCELLED',
     order: {
       id: requiredString(order.id),
-      userId: requiredString(order.userId),
+      accountId: requiredString(order.accountId),
       instrumentId: requiredString(order.instrumentId),
       side: oneOf(order.side, TRADE_SIDES),
       type: 'LIMIT',

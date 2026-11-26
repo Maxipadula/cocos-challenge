@@ -16,8 +16,9 @@ import {
   type InstrumentInfo,
   InstrumentQueries,
 } from '#instruments/application/instrument-queries.js';
+import { AccountNotFoundError } from '#orders/application/errors/account-not-found.error.js';
+import { AccountLock } from '#orders/application/ports/account-lock.js';
 import { OrderRepository } from '#orders/application/ports/order-repository.js';
-import { UserLock } from '#orders/application/ports/user-lock.js';
 import {
   InstrumentNotFoundError,
   InstrumentNotTradableError,
@@ -37,9 +38,11 @@ import {
   type AccountEntry,
   availableCash,
 } from '#orders/domain/services/availability.js';
+import type { AccountId } from '#orders/domain/value-objects/account-id.js';
 import { ShareQuantity } from '#orders/domain/value-objects/share-quantity.js';
 
 import {
+  account,
   fixtureUuid,
   identity,
   owner,
@@ -111,6 +114,7 @@ class MemoryIdempotencyStore extends IdempotencyStore {
 
 class MemoryOrders extends OrderRepository {
   readonly added: TradeOrder[] = [];
+  readonly queriedAccounts: AccountId[] = [];
   addedDuringTransaction = false;
   failOnAdd = false;
 
@@ -122,8 +126,11 @@ class MemoryOrders extends OrderRepository {
     super();
   }
 
-  override async findByUser(): Promise<readonly AccountEntry[]> {
+  override async findByAccount(
+    accountId: AccountId,
+  ): Promise<readonly AccountEntry[]> {
     this.events.push('orders.find');
+    this.queriedAccounts.push(accountId);
     return this.entries;
   }
 
@@ -166,13 +173,26 @@ class MemoryInstruments extends InstrumentQueries {
   }
 }
 
-class MemoryUserLock extends UserLock {
-  constructor(private readonly events: string[]) {
+class MemoryAccountLock extends AccountLock {
+  missing = false;
+  acquiredDuringTransaction = false;
+
+  constructor(
+    private readonly events: string[],
+    private readonly unitOfWork: RecordingUnitOfWork,
+  ) {
     super();
   }
 
-  override async acquire(): Promise<void> {
+  override async acquireForUser(): Promise<AccountId> {
     this.events.push('lock');
+    this.acquiredDuringTransaction = this.unitOfWork.active;
+
+    if (this.missing) {
+      throw new AccountNotFoundError();
+    }
+
+    return account;
   }
 }
 
@@ -201,16 +221,17 @@ function harness(entries: AccountEntry[] = []) {
   const idempotency = new MemoryIdempotencyStore(events, unitOfWork);
   const orders = new MemoryOrders(events, unitOfWork, entries);
   const instruments = new MemoryInstruments(events);
+  const accountLock = new MemoryAccountLock(events, unitOfWork);
   const useCase = new SubmitTradeOrder(
     idempotency,
     instruments,
     unitOfWork,
-    new MemoryUserLock(events),
+    accountLock,
     orders,
     new FixedIds(events),
   );
 
-  return { events, idempotency, orders, instruments, useCase };
+  return { events, idempotency, orders, instruments, accountLock, useCase };
 }
 
 function marketCommand(
@@ -252,7 +273,7 @@ function storedResult(
 ): StoredIdempotency {
   const result: SubmittedTradeOrder = {
     id: fixtureUuid(9),
-    userId: owner,
+    accountId: account,
     instrumentId: stock,
     side: 'BUY',
     type: command.type,
@@ -281,7 +302,9 @@ describe('SubmitTradeOrder', () => {
     const result = await useCase.execute(command);
 
     expect(result).toEqual(submittedTradeOrderFromJson(stored.result));
+    expect(result.accountId).toBe(account);
     expect(events).toEqual(['idempotency.find']);
+    expect(events).not.toContain('lock');
     expect(instruments.instrument).not.toBeNull();
   });
 
@@ -350,11 +373,15 @@ describe('SubmitTradeOrder', () => {
 
     expect(result).toMatchObject({
       id: generatedOrderId,
+      accountId: account,
       status: 'FILLED',
       size: '2',
       price: '10',
       rejectionReason: null,
     });
+    expect(result).not.toHaveProperty('userId');
+    expect(orders.queriedAccounts).toEqual([account]);
+    expect(orders.added[0]?.accountId).toBe(account);
     expect(orders.added[0]?.status).toBe('FILLED');
     expect(orders.added[0]?.settledCashDelta().toDecimalString()).toBe(
       '-20.00',
@@ -362,6 +389,8 @@ describe('SubmitTradeOrder', () => {
     expect(idempotency.saved[0]?.result).toEqual(
       submittedTradeOrderToJson(result),
     );
+    expect(idempotency.saved[0]?.result).toMatchObject({ accountId: account });
+    expect(idempotency.saved[0]?.userId).toBe(owner);
   });
 
   it('opens an accepted limit buy and commits size times the limit price', async () => {
@@ -431,6 +460,7 @@ describe('SubmitTradeOrder', () => {
     expect(result).toEqual(submittedTradeOrderFromJson(stored.result));
     expect(events).toContain('instrument');
     expect(events).toContain('close');
+    expect(events).toContain('lock');
     expect(events).not.toContain('orders.find');
     expect(events).not.toContain('orders.add');
     expect(events).not.toContain('id');
@@ -452,8 +482,8 @@ describe('SubmitTradeOrder', () => {
     expect(idempotency.saved).toHaveLength(0);
   });
 
-  it('locks the user before the second idempotency lookup', async () => {
-    const { events, useCase } = harness([deposit('1000.00')]);
+  it('locks the account inside the transaction and before the second idempotency lookup', async () => {
+    const { events, accountLock, useCase } = harness([deposit('1000.00')]);
 
     await useCase.execute(marketCommand());
 
@@ -463,19 +493,40 @@ describe('SubmitTradeOrder', () => {
     const lock = events.indexOf('lock');
 
     expect(reads).toHaveLength(2);
+    expect(lock).toBeGreaterThan(events.indexOf('transaction'));
     expect(lock).toBeGreaterThan(reads[0] as number);
     expect(lock).toBeLessThan(reads[1] as number);
+    expect(accountLock.acquiredDuringTransaction).toBe(true);
   });
 
-  it('reads the user orders after the lock and inside the transaction', async () => {
+  it('reads the account orders after the lock and inside the transaction', async () => {
     const { events, orders, useCase } = harness([deposit('1000.00')]);
 
     await useCase.execute(marketCommand());
 
+    expect(orders.queriedAccounts).toEqual([account]);
     expect(events.indexOf('orders.find')).toBeGreaterThan(
       events.indexOf('lock'),
     );
     expect(orders.addedDuringTransaction).toBe(true);
+  });
+
+  it('propagates a missing account without consuming the idempotency key', async () => {
+    const { events, accountLock, idempotency, orders, useCase } = harness([
+      deposit('1000.00'),
+    ]);
+    accountLock.missing = true;
+
+    await expect(useCase.execute(marketCommand())).rejects.toBeInstanceOf(
+      AccountNotFoundError,
+    );
+    expect(events).toContain('idempotency.find');
+    expect(events).toContain('transaction');
+    expect(events).toContain('lock');
+    expect(accountLock.acquiredDuringTransaction).toBe(true);
+    expect(orders.queriedAccounts).toEqual([]);
+    expect(orders.added).toEqual([]);
+    expect(idempotency.saved).toEqual([]);
   });
 
   it('saves the order and the idempotent result in the same transaction', async () => {

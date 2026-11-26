@@ -5,12 +5,12 @@ import {
   OrderNotCancellableError,
   OrderSizeRequiredError,
 } from '../errors/order-errors.js';
+import type { AccountId } from '../value-objects/account-id.js';
 import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { RejectionReason } from '../value-objects/rejection-reason.js';
 import { ShareQuantity } from '../value-objects/share-quantity.js';
 import type { UnitPrice } from '../value-objects/unit-price.js';
-import type { UserId } from '../value-objects/user-id.js';
 
 export type TradeSide = 'BUY' | 'SELL';
 export type TradeType = 'MARKET' | 'LIMIT';
@@ -41,7 +41,7 @@ type TradeState =
 
 type TradeOrderProps = {
   readonly id: OrderId;
-  readonly userId: UserId;
+  readonly accountId: AccountId;
   readonly instrumentId: InstrumentId;
   readonly side: TradeSide;
   readonly size: ShareQuantity;
@@ -51,7 +51,7 @@ type TradeOrderProps = {
 export class TradeOrder {
   private constructor(
     readonly id: OrderId,
-    readonly userId: UserId,
+    readonly accountId: AccountId,
     readonly instrumentId: InstrumentId,
     readonly side: TradeSide,
     readonly size: ShareQuantity,
@@ -65,7 +65,7 @@ export class TradeOrder {
     assertOrderSize(props.size);
     return new TradeOrder(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       props.side,
       props.size,
@@ -83,7 +83,7 @@ export class TradeOrder {
     assertOrderSize(props.size);
     return new TradeOrder(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       props.side,
       props.size,
@@ -98,7 +98,7 @@ export class TradeOrder {
     assertOrderSize(props.size);
     return new TradeOrder(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       props.side,
       props.size,
@@ -116,7 +116,7 @@ export class TradeOrder {
     assertOrderSize(props.size);
     return new TradeOrder(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       props.side,
       props.size,
@@ -131,7 +131,7 @@ export class TradeOrder {
     assertOrderSize(props.size);
     return new TradeOrder(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       props.side,
       props.size,
@@ -180,7 +180,7 @@ export class TradeOrder {
 
     return new TradeOrder(
       this.id,
-      this.userId,
+      this.accountId,
       this.instrumentId,
       this.side,
       this.size,

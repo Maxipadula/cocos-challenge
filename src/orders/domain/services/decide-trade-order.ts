@@ -5,11 +5,11 @@ import {
   NonPositiveAmountError,
   OrderSizeRequiredError,
 } from '../errors/order-errors.js';
+import type { AccountId } from '../value-objects/account-id.js';
 import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { ShareQuantity } from '../value-objects/share-quantity.js';
 import type { UnitPrice } from '../value-objects/unit-price.js';
-import type { UserId } from '../value-objects/user-id.js';
 import {
   type AccountEntry,
   availableCash,
@@ -22,7 +22,7 @@ export type TradeSizing =
 
 type DecideTradeOrderBase = {
   readonly id: OrderId;
-  readonly userId: UserId;
+  readonly accountId: AccountId;
   readonly instrumentId: InstrumentId;
   readonly side: TradeSide;
   readonly placedAt: Date;
@@ -44,7 +44,7 @@ export function decideTradeOrder(
   const size = resolveSize(command.sizing, price);
   const identity = {
     id: command.id,
-    userId: command.userId,
+    accountId: command.accountId,
     instrumentId: command.instrumentId,
     side: command.side,
     size,

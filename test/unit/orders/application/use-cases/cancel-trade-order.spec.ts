@@ -8,8 +8,10 @@ import {
 } from '#shared/application/idempotency-store.js';
 import { UnitOfWork } from '#shared/application/unit-of-work.js';
 
+import { AccountNotFoundError } from '#orders/application/errors/account-not-found.error.js';
+import { AccountLock } from '#orders/application/ports/account-lock.js';
 import { OrderRepository } from '#orders/application/ports/order-repository.js';
-import { UserLock } from '#orders/application/ports/user-lock.js';
+import { type UserId, userId } from '#orders/application/types/user-id.js';
 import {
   CANCEL_TRADE_ORDER,
   CancelTradeOrder,
@@ -20,10 +22,14 @@ import {
   cancelTradeOrderResultToJson,
 } from '#orders/application/use-cases/cancel-trade-order.js';
 import { TradeOrder } from '#orders/domain/entities/trade-order.js';
+import {
+  accountId,
+  type AccountId,
+} from '#orders/domain/value-objects/account-id.js';
 import type { OrderId } from '#orders/domain/value-objects/order-id.js';
-import { type UserId, userId } from '#orders/domain/value-objects/user-id.js';
 
 import {
+  account,
   fixtureUuid,
   identity,
   owner,
@@ -87,7 +93,7 @@ class MemoryIdempotencyStore extends IdempotencyStore {
 
 class MemoryOrders extends OrderRepository {
   readonly updated: TradeOrder[] = [];
-  readonly lookups: Array<{ userId: UserId; orderId: OrderId }> = [];
+  readonly lookups: Array<{ accountId: AccountId; orderId: OrderId }> = [];
   updatedDuringTransaction = false;
   found: TradeOrder | null = null;
   failOnFind = false;
@@ -101,8 +107,8 @@ class MemoryOrders extends OrderRepository {
     super();
   }
 
-  override async findByUser(): Promise<readonly []> {
-    return [];
+  override async findByAccount(): Promise<readonly []> {
+    throw new Error('CancelTradeOrder does not list the account.');
   }
 
   override async add(): Promise<void> {
@@ -110,11 +116,11 @@ class MemoryOrders extends OrderRepository {
   }
 
   override async findTradeForUpdate(
-    userId: UserId,
+    accountId: AccountId,
     orderId: OrderId,
   ): Promise<TradeOrder | null> {
     this.events.push('orders.findTradeForUpdate');
-    this.lookups.push({ userId, orderId });
+    this.lookups.push({ accountId, orderId });
 
     if (this.failOnFind) {
       throw new Error('order lookup failed');
@@ -122,7 +128,7 @@ class MemoryOrders extends OrderRepository {
 
     if (
       !this.trade ||
-      this.trade.userId !== userId ||
+      this.trade.accountId !== accountId ||
       this.trade.id !== orderId
     ) {
       this.found = null;
@@ -145,19 +151,33 @@ class MemoryOrders extends OrderRepository {
   }
 }
 
-class MemoryUserLock extends UserLock {
-  constructor(private readonly events: string[]) {
+class MemoryAccountLock extends AccountLock {
+  missing = false;
+  acquiredDuringTransaction = false;
+
+  constructor(
+    private readonly events: string[],
+    private readonly unitOfWork: RecordingUnitOfWork,
+  ) {
     super();
   }
 
-  override async acquire(): Promise<void> {
+  override async acquireForUser(): Promise<AccountId> {
     this.events.push('lock');
+    this.acquiredDuringTransaction = this.unitOfWork.active;
+
+    if (this.missing) {
+      throw new AccountNotFoundError();
+    }
+
+    return account;
   }
 }
 
-function openLimit(): TradeOrder {
+function openLimit(ownerAccount: AccountId = account): TradeOrder {
   return TradeOrder.limitOpen({
     ...identity(4, 3n),
+    accountId: ownerAccount,
     side: 'BUY',
     price: price('10.50'),
   });
@@ -168,14 +188,15 @@ function harness(trade: TradeOrder | null = openLimit()) {
   const unitOfWork = new RecordingUnitOfWork(events);
   const idempotency = new MemoryIdempotencyStore(events, unitOfWork);
   const orders = new MemoryOrders(events, unitOfWork, trade);
+  const accountLock = new MemoryAccountLock(events, unitOfWork);
   const useCase = new CancelTradeOrder(
     idempotency,
     unitOfWork,
-    new MemoryUserLock(events),
+    accountLock,
     orders,
   );
 
-  return { events, idempotency, orders, useCase };
+  return { events, idempotency, orders, accountLock, useCase };
 }
 
 function command(
@@ -202,7 +223,7 @@ const cancelledResult: CancelTradeOrderResult = {
   outcome: 'CANCELLED',
   order: {
     id: fixtureUuid(4),
-    userId: owner,
+    accountId: account,
     instrumentId: stock,
     side: 'BUY',
     type: 'LIMIT',
@@ -224,6 +245,7 @@ describe('CancelTradeOrder', () => {
 
     await expect(useCase.execute(request)).resolves.toEqual(cancelledResult);
     expect(events).toEqual(['idempotency.find']);
+    expect(events).not.toContain('lock');
     expect(events).not.toContain('transaction');
     expect(orders.lookups).toEqual([]);
     expect(orders.updated).toEqual([]);
@@ -323,7 +345,13 @@ describe('CancelTradeOrder', () => {
     expect(orders.updated[0]?.id).toBe(original.id);
     expect(orders.updated[0]?.price).toBe(original.price);
     expect(orders.updatedDuringTransaction).toBe(true);
-    expect(orders.lookups).toEqual([{ userId: owner, orderId: original.id }]);
+    expect(orders.lookups).toEqual([
+      { accountId: account, orderId: original.id },
+    ]);
+    expect(orders.updated[0]?.accountId).toBe(account);
+    expect(result.outcome === 'CANCELLED' && result.order).not.toHaveProperty(
+      'userId',
+    );
     expect(idempotency.saved).toEqual([
       {
         userId: owner,
@@ -360,16 +388,15 @@ describe('CancelTradeOrder', () => {
     expect(idempotency.savedDuringTransaction).toBe(true);
   });
 
-  it('returns NOT_FOUND when the order belongs to another user', async () => {
-    const original = openLimit();
+  it('returns NOT_FOUND when the order belongs to another account', async () => {
+    const original = openLimit(accountId(fixtureUuid(90)));
     const { orders, useCase } = harness(original);
-    const someoneElse = userId(fixtureUuid(8));
 
-    await expect(
-      useCase.execute(command(original.id, 'client-key', someoneElse)),
-    ).resolves.toEqual({ outcome: 'NOT_FOUND' });
+    await expect(useCase.execute(command(original.id))).resolves.toEqual({
+      outcome: 'NOT_FOUND',
+    });
     expect(orders.lookups).toEqual([
-      { userId: someoneElse, orderId: original.id },
+      { accountId: account, orderId: original.id },
     ]);
     expect(orders.updated).toEqual([]);
     expect(original.status).toBe('NEW');
@@ -434,14 +461,31 @@ describe('CancelTradeOrder', () => {
     await expect(useCase.execute(command(cashId))).resolves.toEqual({
       outcome: 'NOT_FOUND',
     });
-    expect(orders.lookups).toEqual([{ userId: owner, orderId: cashId }]);
+    expect(orders.lookups).toEqual([{ accountId: account, orderId: cashId }]);
     expect(orders.updated).toEqual([]);
     expect(idempotency.saved[0]?.result).toEqual({ outcome: 'NOT_FOUND' });
   });
 
-  it('locks the user before the second idempotency check and searches after both reads', async () => {
+  it('propagates a missing account without consuming the idempotency key', async () => {
     const original = openLimit();
-    const { events, useCase } = harness(original);
+    const { events, accountLock, idempotency, orders, useCase } =
+      harness(original);
+    accountLock.missing = true;
+
+    await expect(useCase.execute(command(original.id))).rejects.toBeInstanceOf(
+      AccountNotFoundError,
+    );
+    expect(events).toEqual(['idempotency.find', 'transaction', 'lock']);
+    expect(accountLock.acquiredDuringTransaction).toBe(true);
+    expect(orders.lookups).toEqual([]);
+    expect(orders.updated).toEqual([]);
+    expect(idempotency.saved).toEqual([]);
+    expect(original.status).toBe('NEW');
+  });
+
+  it('locks the account inside the transaction before the second idempotency check', async () => {
+    const original = openLimit();
+    const { events, accountLock, useCase } = harness(original);
 
     await useCase.execute(command(original.id));
 
@@ -455,6 +499,7 @@ describe('CancelTradeOrder', () => {
 
     expect(firstFind).toBeLessThan(transaction);
     expect(transaction).toBeLessThan(lock);
+    expect(accountLock.acquiredDuringTransaction).toBe(true);
     expect(lock).toBeLessThan(secondFind);
     expect(secondFind).toBeLessThan(lookup);
     expect(lookup).toBeLessThan(update);

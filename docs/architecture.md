@@ -77,7 +77,7 @@ Convención del proyecto. Todavía no hay una regla de ESLint que la imponga.
 3. Usa aislamiento `ReadCommitted`.
 4. Si el callback resuelve, Prisma confirma. Si lanza, Prisma revierte y el contexto queda limpio.
 
-El cliente transaccional expone `$queryRaw` y `$executeRaw`. Esas consultas parametrizadas son el mecanismo previsto para un `SELECT … FOR UPDATE` posterior. El bloqueo del usuario no está implementado.
+El cliente transaccional expone `$queryRaw` y `$executeRaw`. Esas consultas parametrizadas son el mecanismo previsto para el `SELECT id FROM accounts WHERE user_id = $1 FOR UPDATE`. El adaptador de ese bloqueo todavía no existe.
 
 La transacción no envuelve el arranque de la aplicación. `PrismaService` conecta en `onModuleInit` y cierra en `onModuleDestroy`.
 
@@ -105,6 +105,10 @@ La transacción no envuelve el arranque de la aplicación. `PrismaService` conec
 - `shared/domain` contiene exclusivamente conceptos de un Shared Kernel explícitamente acordado. La reutilización de código no es motivo suficiente para compartir value objects entre bounded contexts. Hoy el kernel es `Money` y `Uuid`. Los identificadores de un contexto se construyen sobre `Uuid` dentro de ese contexto. Un error de un value object compartido vive en `shared/domain/errors/`. El error de un módulo permanece en su `domain/errors/`.
 - No se crean carpetas ni clases vacías para completar esa estructura. La convención vale para todos los módulos.
 - Los identificadores generados por el sistema son UUID v4 en `string` marcado. El dominio valida el formato y lo guarda en minúsculas. PostgreSQL usa el tipo `UUID` para esas primary y foreign keys, no secuencias numéricas. `UuidGenerator`, en `shared/application`, es el puerto de generación. Su adaptador usa `crypto.randomUUID()`. La `Idempotency-Key` la envía el cliente y sigue siendo un identificador opaco: no se exige que sea un UUID.
+- `User` es la persona. `Account` es su cuenta de inversión. La relación inicial es uno a uno: `accounts.user_id` será único. No hay entidad de dominio `Account`; el dominio de órdenes solo necesita `AccountId`. `UserId` vive en la aplicación, porque identifica a quien llama y no al dueño financiero de una orden.
+- Toda orden y todo movimiento de efectivo pertenecen a una cuenta. El portfolio futuro se calcula por `AccountId`. La cuenta no persiste efectivo, posiciones, reservas ni balances: eso sigue saliendo de las órdenes.
+- `AccountLock.acquireForUser` resuelve y bloquea esa única cuenta dentro de `UnitOfWork`. Si no hay fila, lanza `AccountNotFoundError` y no crea la cuenta. El alta y la cancelación siguen recibiendo `userId`. La idempotencia permanece en `(userId, idempotencyKey)`.
+- Los datos iniciales y las pruebas de integración crean cada usuario junto con su cuenta, en la misma operación. No hay módulo de usuarios ni endpoint de alta de cuentas. El envío de una orden no inserta ninguna de las dos filas.
 
 Tests con Vitest, que es el runner del scaffold ESM de Nest 12:
 
@@ -135,7 +139,7 @@ Ninguna de estas decisiones está implementada:
 - Entidades, value objects y reglas de negocio.
 - Modelos de Prisma para usuarios, instrumentos, órdenes y market data.
 - Tabla de idempotencia HTTP, hash del payload y respuesta guardada.
-- Bloqueo del usuario con `SELECT … FOR UPDATE`.
+- Adaptador del bloqueo de cuenta con `SELECT … FOR UPDATE`.
 - Casos de uso de órdenes, portfolio, búsqueda y efectivo.
 - Endpoints y códigos HTTP, incluido el status de una orden `REJECTED`.
 - Fórmulas de efectivo, reservas, posición y retorno diario.

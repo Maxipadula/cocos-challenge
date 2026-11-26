@@ -4,17 +4,17 @@ import {
   InvalidOrderTimestampError,
   NonPositiveAmountError,
 } from '../errors/order-errors.js';
+import type { AccountId } from '../value-objects/account-id.js';
 import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { RejectionReason } from '../value-objects/rejection-reason.js';
-import type { UserId } from '../value-objects/user-id.js';
 
 export type CashSide = 'CASH_IN' | 'CASH_OUT';
 export type CashStatus = 'FILLED' | 'REJECTED';
 
 type CashMovementProps = {
   readonly id: OrderId;
-  readonly userId: UserId;
+  readonly accountId: AccountId;
   readonly instrumentId: InstrumentId;
   readonly amount: Money;
   readonly placedAt: Date;
@@ -23,7 +23,7 @@ type CashMovementProps = {
 export class CashMovement {
   private constructor(
     readonly id: OrderId,
-    readonly userId: UserId,
+    readonly accountId: AccountId,
     readonly instrumentId: InstrumentId,
     readonly side: CashSide,
     readonly amount: Money,
@@ -36,7 +36,7 @@ export class CashMovement {
     assertPositiveAmount(props.amount);
     return new CashMovement(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       'CASH_IN',
       props.amount,
@@ -54,7 +54,7 @@ export class CashMovement {
 
     return new CashMovement(
       props.id,
-      props.userId,
+      props.accountId,
       props.instrumentId,
       'CASH_OUT',
       props.amount,

@@ -28,14 +28,15 @@ import {
   type DecideTradeOrderCommand,
   type TradeSizing,
 } from '../../domain/services/decide-trade-order.js';
+import type { AccountId } from '../../domain/value-objects/account-id.js';
 import type { InstrumentId } from '../../domain/value-objects/instrument-id.js';
 import { orderId, type OrderId } from '../../domain/value-objects/order-id.js';
 import type { RejectionReason } from '../../domain/value-objects/rejection-reason.js';
 import { ShareQuantity } from '../../domain/value-objects/share-quantity.js';
 import { UnitPrice } from '../../domain/value-objects/unit-price.js';
-import type { UserId } from '../../domain/value-objects/user-id.js';
+import type { AccountLock } from '../ports/account-lock.js';
 import type { OrderRepository } from '../ports/order-repository.js';
-import type { UserLock } from '../ports/user-lock.js';
+import type { UserId } from '../types/user-id.js';
 
 export const SUBMIT_TRADE_ORDER = 'orders.submit-trade';
 
@@ -85,7 +86,7 @@ export type SubmitTradeOrderCommand = {
 
 export type SubmittedTradeOrder = {
   readonly id: string;
-  readonly userId: string;
+  readonly accountId: string;
   readonly instrumentId: string;
   readonly side: TradeSide;
   readonly type: TradeType;
@@ -101,7 +102,7 @@ export class SubmitTradeOrder {
     private readonly idempotency: IdempotencyStore,
     private readonly instruments: InstrumentQueries,
     private readonly unitOfWork: UnitOfWork,
-    private readonly userLock: UserLock,
+    private readonly accountLock: AccountLock,
     private readonly orders: OrderRepository,
     private readonly ids: UuidGenerator,
   ) {}
@@ -155,7 +156,7 @@ export class SubmitTradeOrder {
     requestHash: string,
     executionPrice: UnitPrice | null,
   ): Promise<SubmittedTradeOrder> {
-    await this.userLock.acquire(command.userId);
+    const accountId = await this.accountLock.acquireForUser(command.userId);
     const raced = resolveStored(
       await this.idempotency.find(command.userId, command.idempotencyKey),
       requestHash,
@@ -165,12 +166,12 @@ export class SubmitTradeOrder {
       return raced;
     }
 
-    const entries = await this.orders.findByUser(command.userId);
+    const entries = await this.orders.findByAccount(accountId);
     const id = orderId(this.ids.generate());
     const placedAt = new Date();
     const decision = decideTradeOrder(
       entries,
-      toDomainCommand(command, id, placedAt, executionPrice),
+      toDomainCommand(command, accountId, id, placedAt, executionPrice),
     );
     await this.orders.add(decision);
     const result = toSubmittedTradeOrder(decision);
@@ -247,13 +248,14 @@ function canonicalPrice(price: UnitPrice): string {
 
 function toDomainCommand(
   command: SubmitTradeOrderCommand,
+  accountId: AccountId,
   id: OrderId,
   placedAt: Date,
   executionPrice: UnitPrice | null,
 ): DecideTradeOrderCommand {
   const base = {
     id,
-    userId: command.userId,
+    accountId,
     instrumentId: command.instrumentId,
     side: command.side,
     placedAt,
@@ -274,7 +276,7 @@ function toDomainCommand(
 function toSubmittedTradeOrder(order: TradeOrder): SubmittedTradeOrder {
   return {
     id: order.id,
-    userId: order.userId,
+    accountId: order.accountId,
     instrumentId: order.instrumentId,
     side: order.side,
     type: order.type,
@@ -290,6 +292,7 @@ export function submittedTradeOrderToJson(
   result: SubmittedTradeOrder,
 ): JsonObject {
   return {
+    accountId: result.accountId,
     id: result.id,
     instrumentId: result.instrumentId,
     placedAt: result.placedAt,
@@ -299,7 +302,6 @@ export function submittedTradeOrderToJson(
     size: result.size,
     status: result.status,
     type: result.type,
-    userId: result.userId,
   };
 }
 
@@ -312,7 +314,7 @@ export function submittedTradeOrderFromJson(
 
   return {
     id: requiredString(value.id),
-    userId: requiredString(value.userId),
+    accountId: requiredString(value.accountId),
     instrumentId: requiredString(value.instrumentId),
     side: oneOf(value.side, TRADE_SIDES),
     type: oneOf(value.type, TRADE_TYPES),
