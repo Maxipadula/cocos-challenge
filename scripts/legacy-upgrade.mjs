@@ -44,7 +44,26 @@ try {
 
   console.log(`Backup recorded at ${target.backup}.`);
   console.log('Migration history before upgrade:', history);
-  await runSqlFile(client, 'prisma/legacy-upgrade/001_to_current_schema.sql');
+
+  try {
+    await runSqlFile(client, 'prisma/legacy-upgrade/001_to_current_schema.sql');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    const alreadyUpgraded =
+      message.includes('The current schema is already present.') ||
+      message.includes(
+        'Legacy tables users, instruments, orders and marketdata must already exist.',
+      );
+
+    if (!alreadyUpgraded) {
+      throw error;
+    }
+
+    console.log(
+      'Upgrade SQL was not applied again. The schema comparison decides the baseline.',
+    );
+  }
 } finally {
   await client.end();
 }

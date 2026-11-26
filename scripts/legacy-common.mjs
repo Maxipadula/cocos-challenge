@@ -24,13 +24,15 @@ export function assertLocalHost(hostname) {
   }
 }
 
+const LOCAL_DATABASE_URL = 'postgresql://cocos:cocos@127.0.0.1:5432/postgres';
+
 export function localUrl(database) {
   const configured = process.env.DATABASE_URL;
-  const url = configured
-    ? new URL(configured)
-    : new URL('postgresql://cocos:cocos@127.0.0.1:5432/postgres');
+  const candidate = configured ? new URL(configured) : new URL(LOCAL_DATABASE_URL);
+  const url = LOCAL_HOSTS.has(candidate.hostname)
+    ? candidate
+    : new URL(LOCAL_DATABASE_URL);
 
-  assertLocalHost(url.hostname);
   url.pathname = `/${database}`;
   url.search = '';
   return url.toString();
@@ -89,6 +91,7 @@ export async function publicSchemaSignature(client) {
            pg_get_constraintdef(oid) AS definition
     FROM pg_constraint
     WHERE connamespace = 'public'::regnamespace
+      AND contype <> 'n'
       AND conrelid::regclass::text <> '_prisma_migrations'
     ORDER BY 1, 2
   `);

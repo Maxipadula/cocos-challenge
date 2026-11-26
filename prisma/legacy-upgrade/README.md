@@ -35,7 +35,7 @@ No ejecutar este procedimiento contra la base local `cocos` ni contra `cocos_leg
    npm run db:legacy:upgrade
    ```
 
-El SQL aplicado es `prisma/legacy-upgrade/001_to_current_schema.sql`. Corre en una sola transacción. Si las columnas, los tipos o una orden rechazada no coinciden con las precondiciones, no cambia nada.
+El SQL aplicado es `prisma/legacy-upgrade/001_to_current_schema.sql`. Corre en una sola transacción. Si las columnas, los tipos o una orden rechazada no coinciden con las precondiciones, no cambia nada. Si el esquema actual ya está presente, o si ya no existen las tablas originales, el SQL no se vuelve a aplicar y el comando sigue con la comparación local y el baseline. El baseline se registra solo cuando el esquema coincide. La base de comparación es siempre el Postgres de `127.0.0.1`, aunque `DATABASE_URL` apunte a la remota.
 
 Las transformaciones de datos son las ya aprobadas:
 
@@ -49,7 +49,7 @@ Las transformaciones de datos son las ya aprobadas:
 - Los precios se redondean a dos decimales. `1047.166` queda `1047.17`.
 - Fechas y timestamps sin zona se guardan como UTC.
 
-Después de transformar, el comando compara el esquema con el resultado de aplicar `20261126054100_init` en una base local vacía llamada `cocos_legacy_reference`. Esa base se crea y se borra en el host local. Si la comparación falla, no se registra el baseline: hay que restaurar el dump y no seguir con Prisma Migrate.
+Después de transformar, el comando compara el esquema con el resultado de aplicar `20261126054100_init` en una base local vacía llamada `cocos_legacy_reference`. La comparación ignora las restricciones `NOT NULL` que PostgreSQL 18 guarda en el catálogo, porque esa nulidad ya se compara en las columnas. Esa base se crea y se borra en el host local. Si la comparación falla, no se registra el baseline: hay que restaurar el dump y no seguir con Prisma Migrate.
 
 Solo cuando el esquema coincide, ejecuta:
 
