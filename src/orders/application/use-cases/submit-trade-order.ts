@@ -17,6 +17,7 @@ import type { UuidGenerator } from '#shared/application/uuid-generator.js';
 
 import type { InstrumentQueries } from '#instruments/application/instrument-queries.js';
 
+import { type Account } from '../../domain/entities/account.js';
 import type {
   TradeOrder,
   TradeSide,
@@ -34,7 +35,9 @@ import { orderId, type OrderId } from '../../domain/value-objects/order-id.js';
 import type { RejectionReason } from '../../domain/value-objects/rejection-reason.js';
 import { ShareQuantity } from '../../domain/value-objects/share-quantity.js';
 import { UnitPrice } from '../../domain/value-objects/unit-price.js';
+import { AccountNotFoundError } from '../errors/account-not-found.error.js';
 import type { AccountLock } from '../ports/account-lock.js';
+import type { AccountRepository } from '../ports/account-repository.js';
 import type { OrderRepository } from '../ports/order-repository.js';
 import type { UserId } from '../types/user-id.js';
 
@@ -105,6 +108,7 @@ export class SubmitTradeOrder {
     private readonly accountLock: AccountLock,
     private readonly orders: OrderRepository,
     private readonly ids: UuidGenerator,
+    private readonly accounts: AccountRepository,
   ) {}
 
   async execute(
@@ -166,14 +170,17 @@ export class SubmitTradeOrder {
       return raced;
     }
 
+    const account = await this.loadAccount(accountId);
     const entries = await this.orders.findByAccount(accountId);
     const id = orderId(this.ids.generate());
     const placedAt = new Date();
     const decision = decideTradeOrder(
+      account,
       entries,
       toDomainCommand(command, accountId, id, placedAt, executionPrice),
     );
     await this.orders.add(decision);
+    await this.reserveAcceptedLimit(account, decision);
     const result = toSubmittedTradeOrder(decision);
 
     await this.idempotency.save({
@@ -185,6 +192,32 @@ export class SubmitTradeOrder {
     });
 
     return result;
+  }
+
+  private async loadAccount(accountId: AccountId): Promise<Account> {
+    const account = await this.accounts.findById(accountId);
+
+    if (!account) {
+      throw new AccountNotFoundError();
+    }
+
+    return account;
+  }
+
+  private async reserveAcceptedLimit(
+    account: Account,
+    order: TradeOrder,
+  ): Promise<void> {
+    if (order.type !== 'LIMIT' || order.status !== 'NEW') {
+      return;
+    }
+
+    const reserved =
+      order.side === 'BUY'
+        ? account.reserveCash(order.price.multiply(order.size))
+        : account.reserveShares(order.instrumentId, order.size);
+
+    await this.accounts.save(reserved);
   }
 }
 

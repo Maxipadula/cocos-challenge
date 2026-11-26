@@ -66,9 +66,12 @@ Si `_prisma_migrations` ya existe y no contiene exactamente esa migración aplic
 1. Si `cocos_legacy_test` está vacía, carga `prisma/fixtures/real-database.sql`.
 2. Si todavía tiene el esquema original, ejecuta el mismo SQL de `prisma/legacy-upgrade/`.
 3. Verifica efectivo, tenencias y el `previousClose` de `BBAR`.
-4. Compara el esquema contra una base temporal creada solo con la migración inicial.
-5. Registra el baseline si `_prisma_migrations` no existe.
-6. Corre `npm run test:integration` con `DATABASE_URL` apuntando a `cocos_legacy_test`.
+4. Si todavía no tiene las migraciones posteriores, compara el esquema contra la migración inicial.
+5. Registra el baseline de la migración inicial cuando `_prisma_migrations` no existe. Si ya hay migraciones posteriores registradas, exige que sean exactamente el prefijo aplicado de `prisma/migrations`.
+6. Aplica las migraciones de Prisma que falten, incluido el backfill de reservas. No ejecuta el seed de desarrollo: los datos ya vienen de la fixture transformada.
+7. Verifica `reserved_cash`, las reservas de acciones y que coincidan con las órdenes `LIMIT NEW`.
+8. Compara el esquema final contra todas las migraciones de Prisma, en una base temporal.
+9. Corre `npm run test:integration` con `DATABASE_URL` apuntando a `cocos_legacy_test`.
 
 Antes hace falta el servidor local:
 

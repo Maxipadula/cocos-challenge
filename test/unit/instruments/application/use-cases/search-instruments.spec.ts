@@ -23,6 +23,10 @@ class FakeInstrumentQueries extends InstrumentQueries {
     return null;
   }
 
+  override async findByTicker(): Promise<InstrumentInfo | null> {
+    return null;
+  }
+
   override async search(
     term: string,
     limit?: number,

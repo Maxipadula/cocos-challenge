@@ -41,24 +41,38 @@ model User {
 }
 
 model Account {
-  id            String  @id @db.Uuid
-  userId        String  @unique @map("user_id") @db.Uuid
-  accountNumber String  @unique @map("account_number") @db.VarChar(64)
-  user          User    @relation(fields: [userId], references: [id], onDelete: Restrict)
-  orders        Order[]
+  id                String                    @id @db.Uuid
+  userId            String                    @unique @map("user_id") @db.Uuid
+  accountNumber     String                    @unique @map("account_number") @db.VarChar(64)
+  reservedCash      Decimal                   @default(0) @map("reserved_cash") @db.Decimal(38, 18)
+  user              User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orders            Order[]
+  reservedPositions AccountReservedPosition[]
 
   @@map("accounts")
 }
 
 model Instrument {
-  id         String       @id @db.Uuid
-  ticker     String       @unique @db.VarChar(32)
-  name       String
-  type       String       @db.VarChar(32)
-  orders     Order[]
-  marketData MarketData[]
+  id                String                    @id @db.Uuid
+  ticker            String                    @unique @db.VarChar(32)
+  name              String
+  type              String                    @db.VarChar(32)
+  orders            Order[]
+  marketData        MarketData[]
+  reservedPositions AccountReservedPosition[]
 
   @@map("instruments")
+}
+
+model AccountReservedPosition {
+  accountId    String     @map("account_id") @db.Uuid
+  instrumentId String     @map("instrument_id") @db.Uuid
+  quantity     Decimal    @db.Decimal(38, 0)
+  account      Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  instrument   Instrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+
+  @@id([accountId, instrumentId])
+  @@map("account_reserved_positions")
 }
 
 model MarketData {

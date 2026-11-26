@@ -4,6 +4,7 @@ import { PrismaClientProvider } from '#shared/infrastructure/prisma/prisma-clien
 
 import { Prisma } from '../../../generated/prisma/client.js';
 import { OrderRepository } from '../../application/ports/order-repository.js';
+import { CashMovement } from '../../domain/entities/cash-movement.js';
 import { TradeOrder } from '../../domain/entities/trade-order.js';
 import type { AccountEntry } from '../../domain/services/availability.js';
 import type { AccountId } from '../../domain/value-objects/account-id.js';
@@ -57,6 +58,23 @@ export class PrismaOrderRepository extends OrderRepository {
         status: order.status,
         rejectionReason: order.rejectionReason,
         placedAt: order.placedAt,
+      },
+    });
+  }
+
+  override async addCashMovement(movement: CashMovement): Promise<void> {
+    await this.clients.getTransactionClient().order.create({
+      data: {
+        id: movement.id,
+        accountId: movement.accountId,
+        instrumentId: movement.instrumentId,
+        side: movement.side,
+        size: new Prisma.Decimal(movement.amount.toDecimalString()),
+        price: null,
+        type: null,
+        status: movement.cashStatus,
+        rejectionReason: movement.rejectionReason,
+        placedAt: movement.placedAt,
       },
     });
   }

@@ -105,6 +105,7 @@ describe('HTTP presentation with simulated use cases', () => {
     portfolio.mockResolvedValueOnce({
       accountId: '00000000-0000-4000-8000-000000000003',
       settledCash: '10',
+      reservedCash: '0',
       availableCash: '10',
       totalValue: '10',
       positions: [],

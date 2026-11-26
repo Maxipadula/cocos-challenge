@@ -19,6 +19,8 @@ import {
   account,
   fixtureUuid,
   identity,
+  peso,
+  placedAt,
   price,
 } from '../domain/order-fixture.js';
 
@@ -401,6 +403,33 @@ describe('PrismaOrderRepository', () => {
     );
     expect(create.mock.calls[2]?.[0].data.status).toBe('NEW');
     expect(create.mock.calls[3]?.[0].data.status).toBe('REJECTED');
+  });
+
+  it('persists a cash movement with a decimal amount and no price', async () => {
+    const { create, getClient, unitOfWork, repository } = createHarness();
+    create.mockResolvedValue({});
+    const movement = CashMovement.cashOut({
+      ...identity(15, 1n),
+      instrumentId: peso,
+      amount: Money.parse('40.50'),
+      placedAt,
+      availableCash: Money.parse('10.00'),
+    });
+
+    await unitOfWork.run(() => repository.addCashMovement(movement));
+
+    const data = create.mock.calls[0]?.[0].data;
+
+    expect(getClient).not.toHaveBeenCalled();
+    expect(data).toMatchObject({
+      id: movement.id,
+      side: 'CASH_OUT',
+      price: null,
+      type: null,
+      status: 'REJECTED',
+      rejectionReason: 'INSUFFICIENT_CASH',
+    });
+    expect(data.size).toEqual(new Prisma.Decimal('40.50'));
   });
 
   it('locks only a buy or sell row for the requested account and order', async () => {

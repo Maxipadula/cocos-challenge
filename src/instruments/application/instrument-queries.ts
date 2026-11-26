@@ -17,6 +17,8 @@ export type MarketDataQuote = {
 export abstract class InstrumentQueries {
   abstract findById(id: Uuid): Promise<InstrumentInfo | null>;
 
+  abstract findByTicker(ticker: string): Promise<InstrumentInfo | null>;
+
   abstract search(
     term: string,
     limit?: number,

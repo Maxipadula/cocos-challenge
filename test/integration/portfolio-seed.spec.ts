@@ -44,12 +44,26 @@ describeWithLocalDatabase('seeded challenge portfolio', () => {
 
     expect(loaded.snapshot).not.toBeNull();
     expect(money(loaded.portfolio.settledCash, '783800')).toBe(true);
-    expect(money(loaded.snapshot?.committedCash ?? '', '125500')).toBe(true);
+    expect(money(loaded.snapshot?.reservedCash ?? '', '125500')).toBe(true);
+    expect(money(loaded.snapshot?.availableCash ?? '', '658300')).toBe(true);
+    expect(money(loaded.portfolio.reservedCash, '125500')).toBe(true);
     expect(money(loaded.portfolio.availableCash, '658300')).toBe(true);
     expect(money(loaded.portfolio.totalValue ?? '', '890500')).toBe(true);
-    expect(position(loaded.portfolio.positions, 'PAMP')).toBe('40');
-    expect(position(loaded.portfolio.positions, 'METR')).toBe('500');
-    expect(position(loaded.portfolio.positions, 'BMA')).toBe('-30');
+    expect(position(loaded.portfolio.positions, 'PAMP')).toEqual({
+      quantity: '40',
+      reservedQuantity: '0',
+      availableQuantity: '40',
+    });
+    expect(position(loaded.portfolio.positions, 'METR')).toEqual({
+      quantity: '500',
+      reservedQuantity: '0',
+      availableQuantity: '500',
+    });
+    expect(position(loaded.portfolio.positions, 'BMA')).toEqual({
+      quantity: '-30',
+      reservedQuantity: '0',
+      availableQuantity: '0',
+    });
     expect(
       loaded.portfolio.positions.some((item) => item.ticker === 'LOMA'),
     ).toBe(false);
@@ -77,7 +91,8 @@ describeWithLocalDatabase('seeded challenge portfolio', () => {
       expect(user.account?.orders).toEqual([]);
       expect(money(loaded.portfolio.settledCash, '0')).toBe(true);
       expect(loaded.snapshot).not.toBeNull();
-      expect(money(loaded.snapshot?.committedCash ?? '', '0')).toBe(true);
+      expect(money(loaded.snapshot?.reservedCash ?? '', '0')).toBe(true);
+      expect(money(loaded.portfolio.reservedCash, '0')).toBe(true);
       expect(money(loaded.portfolio.availableCash, '0')).toBe(true);
       expect(money(loaded.portfolio.totalValue ?? '', '0')).toBe(true);
       expect(loaded.portfolio.positions).toEqual([]);
@@ -135,10 +150,31 @@ function money(actual: string, expected: string): boolean {
 }
 
 function position(
-  positions: ReadonlyArray<{ ticker: string; quantity: string }>,
+  positions: ReadonlyArray<{
+    ticker: string;
+    quantity: string;
+    reservedQuantity: string;
+    availableQuantity: string;
+  }>,
   ticker: string,
-): string | undefined {
-  return positions.find((item) => item.ticker === ticker)?.quantity;
+):
+  | {
+      quantity: string;
+      reservedQuantity: string;
+      availableQuantity: string;
+    }
+  | undefined {
+  const found = positions.find((item) => item.ticker === ticker);
+
+  if (!found) {
+    return undefined;
+  }
+
+  return {
+    quantity: found.quantity,
+    reservedQuantity: found.reservedQuantity,
+    availableQuantity: found.availableQuantity,
+  };
 }
 
 function isLocalDatabase(connectionString: string): boolean {

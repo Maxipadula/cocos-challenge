@@ -1,5 +1,6 @@
-import type { Money } from '#shared/domain/value-objects/money.js';
+import { Money } from '#shared/domain/value-objects/money.js';
 
+import { type Account } from '../entities/account.js';
 import { TradeOrder, type TradeSide } from '../entities/trade-order.js';
 import {
   NonPositiveAmountError,
@@ -10,11 +11,7 @@ import type { InstrumentId } from '../value-objects/instrument-id.js';
 import type { OrderId } from '../value-objects/order-id.js';
 import type { ShareQuantity } from '../value-objects/share-quantity.js';
 import type { UnitPrice } from '../value-objects/unit-price.js';
-import {
-  type AccountEntry,
-  availableCash,
-  availableShares,
-} from './availability.js';
+import type { AccountEntry } from './availability.js';
 
 export type TradeSizing =
   | { readonly kind: 'QUANTITY'; readonly quantity: ShareQuantity }
@@ -36,6 +33,7 @@ export type DecideTradeOrderCommand = DecideTradeOrderBase &
   );
 
 export function decideTradeOrder(
+  account: Account,
   existing: readonly AccountEntry[],
   command: DecideTradeOrderCommand,
 ): TradeOrder {
@@ -55,7 +53,7 @@ export function decideTradeOrder(
   if (command.side === 'BUY') {
     const cost = price.multiply(size);
 
-    if (availableCash(existing).lessThan(cost)) {
+    if (account.availableCash(settledCash(existing)).lessThan(cost)) {
       return command.type === 'MARKET'
         ? TradeOrder.marketRejected({
             ...identity,
@@ -66,7 +64,12 @@ export function decideTradeOrder(
             reason: 'INSUFFICIENT_CASH',
           });
     }
-  } else if (availableShares(existing, command.instrumentId).lessThan(size)) {
+  } else if (
+    account.availableShares(
+      command.instrumentId,
+      settledShares(existing, command.instrumentId),
+    ) < size.toBigInt()
+  ) {
     return command.type === 'MARKET'
       ? TradeOrder.marketRejected({
           ...identity,
@@ -81,6 +84,26 @@ export function decideTradeOrder(
   return command.type === 'MARKET'
     ? TradeOrder.marketFilled(identity)
     : TradeOrder.limitOpen(identity);
+}
+
+function settledCash(entries: readonly AccountEntry[]): Money {
+  return entries.reduce(
+    (total, entry) => total.add(entry.settledCashDelta()),
+    Money.zero(),
+  );
+}
+
+function settledShares(
+  entries: readonly AccountEntry[],
+  instrumentId: InstrumentId,
+): bigint {
+  return entries.reduce(
+    (total, entry) =>
+      entry instanceof TradeOrder
+        ? total + entry.settledShares(instrumentId)
+        : total,
+    0n,
+  );
 }
 
 function resolveSize(sizing: TradeSizing, price: UnitPrice): ShareQuantity {

@@ -59,6 +59,40 @@ describe('PrismaInstrumentQueries', () => {
     expect(getTransactionClient).not.toHaveBeenCalled();
   });
 
+  it('finds ARS by ticker without excluding currency instruments', async () => {
+    const { queryRaw, findUnique, getClient, getTransactionClient, queries } =
+      createHarness();
+    queryRaw.mockResolvedValue([
+      {
+        id: instrumentId,
+        ticker: 'ARS',
+        name: 'Peso argentino',
+        type: 'MONEDA',
+      },
+    ]);
+
+    await expect(queries.findByTicker('ARS')).resolves.toEqual({
+      id: instrumentId,
+      ticker: 'ARS',
+      name: 'Peso argentino',
+      type: 'MONEDA',
+    });
+
+    const [statement, ticker] = queryRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      string,
+    ];
+    const sql = sqlText(statement);
+
+    expect(ticker).toBe('ARS');
+    expect(sql).toContain('ticker =');
+    expect(sql).not.toContain('MONEDA');
+    expect(sql).not.toContain('ARS');
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(getClient).toHaveBeenCalledOnce();
+    expect(getTransactionClient).not.toHaveBeenCalled();
+  });
+
   it('returns null when the instrument does not exist', async () => {
     const { findUnique, queries } = createHarness();
     findUnique.mockResolvedValue(null);

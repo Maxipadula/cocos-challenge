@@ -51,6 +51,10 @@ class FakeInstruments extends InstrumentQueries {
     return Promise.resolve(null);
   }
 
+  override findByTicker(): Promise<InstrumentInfo | null> {
+    return Promise.resolve(null);
+  }
+
   override search(): Promise<readonly InstrumentInfo[]> {
     return Promise.resolve([]);
   }
@@ -63,15 +67,28 @@ class FakeInstruments extends InstrumentQueries {
 function snapshot(
   positions: AccountPortfolioSnapshot['positions'] = [],
   cash: Partial<
-    Pick<AccountPortfolioSnapshot, 'settledCash' | 'committedCash'>
+    Pick<
+      AccountPortfolioSnapshot,
+      'settledCash' | 'reservedCash' | 'availableCash'
+    >
   > = {},
 ): AccountPortfolioSnapshot {
   return {
     accountId: account,
     settledCash: cash.settledCash ?? '0',
-    committedCash: cash.committedCash ?? '0',
+    reservedCash: cash.reservedCash ?? '0',
+    availableCash: cash.availableCash ?? cash.settledCash ?? '0',
     positions,
   };
+}
+
+function held(
+  instrumentId: AccountPortfolioSnapshot['positions'][number]['instrumentId'],
+  quantity: string,
+  reservedQuantity = '0',
+  availableQuantity = quantity.startsWith('-') ? '0' : quantity,
+): AccountPortfolioSnapshot['positions'][number] {
+  return { instrumentId, quantity, reservedQuantity, availableQuantity };
 }
 
 describe('GetPortfolio', () => {
@@ -89,7 +106,11 @@ describe('GetPortfolio', () => {
     const instruments = new FakeInstruments();
     const portfolio = new GetPortfolio(
       new FakeOrders(
-        snapshot([], { settledCash: '25.00', committedCash: '5.00' }),
+        snapshot([], {
+          settledCash: '25.00',
+          reservedCash: '5.00',
+          availableCash: '20.00',
+        }),
       ),
       instruments,
     );
@@ -97,6 +118,7 @@ describe('GetPortfolio', () => {
     await expect(portfolio.execute(user)).resolves.toEqual({
       accountId: account,
       settledCash: '25.00',
+      reservedCash: '5.00',
       availableCash: '20.00',
       totalValue: '25.00',
       positions: [],
@@ -112,8 +134,8 @@ describe('GetPortfolio', () => {
     const portfolio = new GetPortfolio(
       new FakeOrders(
         snapshot([
-          { instrumentId: other, quantity: '1' },
-          { instrumentId: stock, quantity: '2' },
+          held(other, '1'),
+          held(stock, '2'),
         ]),
       ),
       instruments,
@@ -136,7 +158,7 @@ describe('GetPortfolio', () => {
     ]);
     const portfolio = new GetPortfolio(
       new FakeOrders(
-        snapshot([{ instrumentId: stock, quantity: '3' }], {
+        snapshot([held(stock, '3')], {
           settledCash: '10.00',
         }),
       ),
@@ -151,6 +173,8 @@ describe('GetPortfolio', () => {
         ticker: 'GGAL',
         name: 'Grupo Galicia',
         quantity: '3',
+        reservedQuantity: '0',
+        availableQuantity: '3',
         close: null,
         marketValue: null,
         dailyReturnPercentage: null,
@@ -173,7 +197,7 @@ describe('GetPortfolio', () => {
       ],
     );
     const portfolio = new GetPortfolio(
-      new FakeOrders(snapshot([{ instrumentId: stock, quantity: '2' }])),
+      new FakeOrders(snapshot([held(stock, '2')])),
       instruments,
     );
 
@@ -189,7 +213,7 @@ describe('GetPortfolio', () => {
       { id: stock, ticker: 'ARS', name: 'Peso argentino', type: 'MONEDA' },
     ]);
     const portfolio = new GetPortfolio(
-      new FakeOrders(snapshot([{ instrumentId: stock, quantity: '1' }])),
+      new FakeOrders(snapshot([held(stock, '1')])),
       instruments,
     );
 
@@ -213,9 +237,10 @@ describe('GetPortfolio', () => {
     );
     const portfolio = new GetPortfolio(
       new FakeOrders(
-        snapshot([{ instrumentId: stock, quantity }], {
+        snapshot([held(stock, quantity)], {
           settledCash: (10n ** 21n).toString(),
-          committedCash: '0',
+          reservedCash: '0',
+          availableCash: (10n ** 21n).toString(),
         }),
       ),
       instruments,

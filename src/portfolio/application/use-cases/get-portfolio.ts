@@ -18,6 +18,7 @@ import { PortfolioInstrumentMissingError } from '../errors/portfolio-instrument-
 export type Portfolio = {
   readonly accountId: string;
   readonly settledCash: string;
+  readonly reservedCash: string;
   readonly availableCash: string;
   readonly totalValue: string | null;
   readonly positions: readonly PortfolioPosition[];
@@ -41,7 +42,8 @@ export class GetPortfolio {
         snapshot,
         valuePortfolio({
           settledCash: snapshot.settledCash,
-          committedCash: snapshot.committedCash,
+          reservedCash: snapshot.reservedCash,
+          availableCash: snapshot.availableCash,
           positions: [],
         }),
       );
@@ -67,7 +69,8 @@ export class GetPortfolio {
       snapshot,
       valuePortfolio({
         settledCash: snapshot.settledCash,
-        committedCash: snapshot.committedCash,
+        reservedCash: snapshot.reservedCash,
+        availableCash: snapshot.availableCash,
         positions: snapshot.positions.map((position) => {
           const instrument = described.get(position.instrumentId);
 
@@ -84,6 +87,8 @@ export class GetPortfolio {
             ticker: instrument.ticker,
             name: instrument.name,
             quantity: position.quantity,
+            reservedQuantity: position.reservedQuantity,
+            availableQuantity: position.availableQuantity,
             quote: quoted.get(position.instrumentId) ?? null,
           };
         }),
@@ -99,6 +104,7 @@ function portfolioOf(
   return {
     accountId: snapshot.accountId,
     settledCash: valuation.settledCash,
+    reservedCash: valuation.reservedCash,
     availableCash: valuation.availableCash,
     totalValue: valuation.totalValue,
     positions: valuation.positions,

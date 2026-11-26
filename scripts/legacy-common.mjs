@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -123,6 +123,43 @@ export async function inspectMigrationTable(client) {
   `);
 
   return rows.rows;
+}
+
+export function prismaMigrationNames() {
+  return readdirSync(path.join(root, 'prisma/migrations'), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+export function assertRehearsalHistory(rows) {
+  const known = prismaMigrationNames();
+
+  if (rows.length === 0) {
+    return 'missing';
+  }
+
+  if (rows.length > known.length) {
+    throw new Error(
+      `Refusing to continue. _prisma_migrations has unexpected rows: ${JSON.stringify(rows)}.`,
+    );
+  }
+
+  for (const [index, row] of rows.entries()) {
+    if (
+      row.migration_name !== known[index] ||
+      row.finished_at === null ||
+      row.rolled_back_at !== null
+    ) {
+      throw new Error(
+        `Refusing to continue. _prisma_migrations contains: ${JSON.stringify(rows)}.`,
+      );
+    }
+  }
+
+  return 'recorded';
 }
 
 export function assertBaselineIsSafe(rows) {

@@ -19,6 +19,10 @@ const stock = fixtureUuid(20);
 const peso = fixtureUuid(1);
 const maxShare = (10n ** 20n - 1n).toString();
 
+function sameMoney(actual: string | undefined, expected: string): boolean {
+  return Money.fromCalculation(actual ?? '0').equals(Money.parse(expected));
+}
+
 function sqlText(strings: TemplateStringsArray): string {
   return strings.join('?');
 }
@@ -35,10 +39,14 @@ function orderRow(
     rejectionReason: string | null;
     ticker: string;
     instrumentType: string;
+    reservedCash: string;
+    reservedPositions: unknown;
   }> = {},
 ) {
   return {
     account_id: account,
+    reserved_cash: new Prisma.Decimal(overrides.reservedCash ?? '0'),
+    reserved_positions: overrides.reservedPositions ?? [],
     id: overrides.id ?? fixtureUuid(4),
     instrument_id: overrides.instrumentId ?? stock,
     side: overrides.side ?? 'BUY',
@@ -59,6 +67,8 @@ function orderRow(
 function emptyAccount() {
   return {
     account_id: account,
+    reserved_cash: new Prisma.Decimal('0'),
+    reserved_positions: [],
     id: null,
     instrument_id: null,
     side: null,
@@ -88,7 +98,7 @@ function createHarness() {
   };
 }
 
-describe('PrismaOrdersPortfolioData', () => {
+describe('PrismaOrdersPortfolioData with a fake Prisma client', () => {
   it('returns null when the user has no account', async () => {
     const { queryRaw, getClient, getTransactionClient, portfolio } =
       createHarness();
@@ -103,7 +113,13 @@ describe('PrismaOrdersPortfolioData', () => {
     const sql = sqlText(statement);
 
     expect(parameter).toBe(user);
+    expect(queryRaw).toHaveBeenCalledOnce();
     expect(sql).toContain('FROM accounts');
+    expect(sql).toContain('accounts.reserved_cash');
+    expect(sql).toContain('json_agg');
+    expect(sql).toContain('FROM account_reserved_positions');
+    expect(sql).toContain('quantity::text');
+    expect(sql).not.toContain('JOIN account_reserved_positions');
     expect(sql).toContain('LEFT JOIN orders');
     expect(sql).toContain('LEFT JOIN instruments');
     expect(sql).toContain('instruments.ticker AS instrument_ticker');
@@ -122,7 +138,8 @@ describe('PrismaOrdersPortfolioData', () => {
     await expect(portfolio.findByUserId(user)).resolves.toEqual({
       accountId: account,
       settledCash: '0',
-      committedCash: '0',
+      reservedCash: '0',
+      availableCash: '0',
       positions: [],
     });
   });
@@ -130,8 +147,20 @@ describe('PrismaOrdersPortfolioData', () => {
   it('folds real entities and omits a zero net quantity', async () => {
     const { queryRaw, portfolio } = createHarness();
     queryRaw.mockResolvedValue([
-      orderRow({ id: fixtureUuid(1), side: 'BUY', size: '5', price: '10.00' }),
-      orderRow({ id: fixtureUuid(2), side: 'SELL', size: '5', price: '12.00' }),
+      orderRow({
+        id: fixtureUuid(1),
+        side: 'BUY',
+        size: '5',
+        price: '10.00',
+        reservedCash: '16.00',
+      }),
+      orderRow({
+        id: fixtureUuid(2),
+        side: 'SELL',
+        size: '5',
+        price: '12.00',
+        reservedCash: '16.00',
+      }),
       orderRow({
         id: fixtureUuid(3),
         side: 'CASH_IN',
@@ -141,9 +170,42 @@ describe('PrismaOrdersPortfolioData', () => {
         instrumentId: peso,
         ticker: 'ARS',
         instrumentType: 'MONEDA',
+        reservedCash: '16.00',
       }),
       orderRow({
         id: fixtureUuid(4),
+        type: 'LIMIT',
+        status: 'NEW',
+        side: 'BUY',
+        size: '2',
+        price: '8.00',
+        reservedCash: '16.00',
+      }),
+    ]);
+
+    const snapshot = await portfolio.findByUserId(user);
+
+    expect(sameMoney(snapshot?.settledCash, '110')).toBe(true);
+    expect(sameMoney(snapshot?.reservedCash, '16')).toBe(true);
+    expect(sameMoney(snapshot?.availableCash, '94')).toBe(true);
+    expect(snapshot?.positions).toEqual([]);
+  });
+
+  it('does not turn a limit order into a reserve when the account has none', async () => {
+    const { queryRaw, portfolio } = createHarness();
+    queryRaw.mockResolvedValue([
+      orderRow({
+        id: fixtureUuid(1),
+        side: 'CASH_IN',
+        size: '100.00',
+        price: null,
+        type: null,
+        instrumentId: peso,
+        ticker: 'ARS',
+        instrumentType: 'MONEDA',
+      }),
+      orderRow({
+        id: fixtureUuid(2),
         type: 'LIMIT',
         status: 'NEW',
         side: 'BUY',
@@ -154,30 +216,70 @@ describe('PrismaOrdersPortfolioData', () => {
 
     const snapshot = await portfolio.findByUserId(user);
 
-    expect(
-      Money.fromCalculation(snapshot?.settledCash ?? '0').equals(
-        Money.parse('110'),
-      ),
-    ).toBe(true);
-    expect(
-      Money.fromCalculation(snapshot?.committedCash ?? '0').equals(
-        Money.parse('16'),
-      ),
-    ).toBe(true);
-    expect(snapshot?.positions).toEqual([]);
+    expect(sameMoney(snapshot?.settledCash, '100')).toBe(true);
+    expect(sameMoney(snapshot?.reservedCash, '0')).toBe(true);
+    expect(sameMoney(snapshot?.availableCash, '100')).toBe(true);
+  });
+
+  it('shows an instrument that only has a share reservation', async () => {
+    const { queryRaw, portfolio } = createHarness();
+    queryRaw.mockResolvedValue([
+      {
+        ...emptyAccount(),
+        reserved_positions: [{ instrument_id: stock, quantity: '6' }],
+      },
+    ]);
+
+    const snapshot = await portfolio.findByUserId(user);
+
+    expect(snapshot?.positions).toEqual([
+      {
+        instrumentId: stock,
+        quantity: '0',
+        reservedQuantity: '6',
+        availableQuantity: '0',
+      },
+    ]);
+  });
+
+  it('keeps a negative available cash when reserves exceed settled cash', async () => {
+    const { queryRaw, portfolio } = createHarness();
+    queryRaw.mockResolvedValue([
+      orderRow({
+        side: 'CASH_IN',
+        size: '1000.00',
+        price: null,
+        type: null,
+        instrumentId: peso,
+        ticker: 'ARS',
+        instrumentType: 'MONEDA',
+        reservedCash: '1500.00',
+      }),
+    ]);
+
+    const snapshot = await portfolio.findByUserId(user);
+
+    expect(sameMoney(snapshot?.availableCash, '-500')).toBe(true);
+    expect(sameMoney(snapshot?.reservedCash, '1500')).toBe(true);
   });
 
   it('returns a negative quantity and a quantity above the persistable share limit', async () => {
     const { queryRaw, portfolio } = createHarness();
     const other = fixtureUuid(21);
     queryRaw.mockResolvedValue([
-      orderRow({ id: fixtureUuid(1), side: 'SELL', size: '4' }),
+      orderRow({
+        id: fixtureUuid(1),
+        side: 'SELL',
+        size: '4',
+        reservedPositions: [{ instrument_id: stock, quantity: '2' }],
+      }),
       orderRow({
         id: fixtureUuid(2),
         side: 'BUY',
         size: maxShare,
         instrumentId: other,
         ticker: 'YPF',
+        reservedPositions: [{ instrument_id: stock, quantity: '2' }],
       }),
       orderRow({
         id: fixtureUuid(3),
@@ -185,15 +287,28 @@ describe('PrismaOrdersPortfolioData', () => {
         size: maxShare,
         instrumentId: other,
         ticker: 'YPF',
+        reservedPositions: [{ instrument_id: stock, quantity: '2' }],
       }),
     ]);
 
     const snapshot = await portfolio.findByUserId(user);
     const oversized = snapshot?.positions[1]?.quantity ?? '0';
 
+    const oversizedQuantity = ((10n ** 20n - 1n) * 2n).toString();
+
     expect(snapshot?.positions).toEqual([
-      { instrumentId: stock, quantity: '-4' },
-      { instrumentId: other, quantity: ((10n ** 20n - 1n) * 2n).toString() },
+      {
+        instrumentId: stock,
+        quantity: '-4',
+        reservedQuantity: '2',
+        availableQuantity: '0',
+      },
+      {
+        instrumentId: other,
+        quantity: oversizedQuantity,
+        reservedQuantity: '0',
+        availableQuantity: oversizedQuantity,
+      },
     ]);
     expect(() => ShareQuantity.of(BigInt(oversized))).toThrow(
       InvalidShareQuantityError,

@@ -18,6 +18,8 @@ export type PortfolioPositionInput = {
   readonly ticker: string;
   readonly name: string;
   readonly quantity: string;
+  readonly reservedQuantity: string;
+  readonly availableQuantity: string;
   readonly quote: PortfolioQuote | null;
 };
 
@@ -26,6 +28,8 @@ export type PortfolioPosition = {
   readonly ticker: string;
   readonly name: string;
   readonly quantity: string;
+  readonly reservedQuantity: string;
+  readonly availableQuantity: string;
   readonly close: string | null;
   readonly marketValue: string | null;
   readonly dailyReturnPercentage: string | null;
@@ -33,6 +37,7 @@ export type PortfolioPosition = {
 
 export type PortfolioValuation = {
   readonly settledCash: string;
+  readonly reservedCash: string;
   readonly availableCash: string;
   readonly totalValue: string | null;
   readonly positions: readonly PortfolioPosition[];
@@ -40,19 +45,23 @@ export type PortfolioValuation = {
 
 export function valuePortfolio(input: {
   readonly settledCash: string;
-  readonly committedCash: string;
+  readonly reservedCash: string;
+  readonly availableCash: string;
   readonly positions: readonly PortfolioPositionInput[];
 }): PortfolioValuation {
   const settled = Money.fromCalculation(input.settledCash);
-  const committed = Money.fromCalculation(input.committedCash);
+  const reserved = Money.fromCalculation(input.reservedCash);
+  const available = Money.fromCalculation(input.availableCash);
   let total: Money | null = settled;
   const positions = input.positions.map((position) => {
     const quantity = parseSignedInteger(position.quantity);
+    const reservedQuantity = canonicalQuantity(position.reservedQuantity);
+    const availableQuantity = canonicalQuantity(position.availableQuantity);
 
     if (!position.quote) {
       total = null;
 
-      return unvalued(position);
+      return unvalued(position, reservedQuantity, availableQuantity);
     }
 
     const close = Money.parse(position.quote.close);
@@ -66,7 +75,9 @@ export function valuePortfolio(input: {
       instrumentId: position.instrumentId,
       ticker: position.ticker,
       name: position.name,
-      quantity: position.quantity,
+      quantity: quantity.toString(),
+      reservedQuantity,
+      availableQuantity,
       close: close.toDecimalString(),
       marketValue: marketValue.toDecimalString(),
       dailyReturnPercentage: dailyReturnPercentage(
@@ -78,7 +89,8 @@ export function valuePortfolio(input: {
 
   return {
     settledCash: settled.toDecimalString(),
-    availableCash: settled.subtract(committed).toDecimalString(),
+    reservedCash: reserved.toDecimalString(),
+    availableCash: available.toDecimalString(),
     totalValue: total?.toDecimalString() ?? null,
     positions,
   };
@@ -109,16 +121,26 @@ export function dailyReturnPercentage(
   return formatScaled(negative ? -rounded : rounded, PERCENT_SCALE);
 }
 
-function unvalued(position: PortfolioPositionInput): PortfolioPosition {
+function unvalued(
+  position: PortfolioPositionInput,
+  reservedQuantity: string,
+  availableQuantity: string,
+): PortfolioPosition {
   return {
     instrumentId: position.instrumentId,
     ticker: position.ticker,
     name: position.name,
-    quantity: position.quantity,
+    quantity: parseSignedInteger(position.quantity).toString(),
+    reservedQuantity,
+    availableQuantity,
     close: null,
     marketValue: null,
     dailyReturnPercentage: null,
   };
+}
+
+function canonicalQuantity(value: string): string {
+  return parseSignedInteger(value).toString();
 }
 
 function parseSignedInteger(value: string): bigint {

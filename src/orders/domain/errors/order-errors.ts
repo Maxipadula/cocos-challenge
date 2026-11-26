@@ -62,3 +62,17 @@ export class InvalidOrderIdError extends Error {
     this.name = 'InvalidOrderIdError';
   }
 }
+
+export class ExcessReservationReleaseError extends Error {
+  constructor(message = 'Cannot release more than the reserved amount.') {
+    super(message);
+    this.name = 'ExcessReservationReleaseError';
+  }
+}
+
+export class ReservationNotPersistableError extends Error {
+  constructor(message = 'Reservation exceeds the persistence limit.') {
+    super(message);
+    this.name = 'ReservationNotPersistableError';
+  }
+}

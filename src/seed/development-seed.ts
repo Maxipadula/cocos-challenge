@@ -69,6 +69,12 @@ export async function seedDevelopmentDatabase(
         for (const order of plan.orders) {
           await insertOrder(tx, order);
         }
+
+        await syncReservations(tx, plan);
+        await assertAccountReservationsMatchOrders(
+          tx,
+          plan.accounts.map((account) => account.id),
+        );
       },
       { timeout: 30_000 },
     );
@@ -314,6 +320,255 @@ async function insertOrder(tx: SeedClient, order: SeedOrder): Promise<void> {
     rows[0].placed_at.toISOString(),
     order.placedAt.toISOString(),
   );
+}
+
+async function syncReservations(
+  tx: SeedClient,
+  plan: DevelopmentSeedPlan,
+): Promise<void> {
+  const reservedCash = new Map<string, Prisma.Decimal>(
+    plan.accounts.map((account) => [account.id, new Prisma.Decimal(0)]),
+  );
+  const reservedShares = new Map<string, Map<string, Prisma.Decimal>>(
+    plan.accounts.map((account) => [account.id, new Map()]),
+  );
+
+  for (const order of plan.orders) {
+    if (
+      order.type !== 'LIMIT' ||
+      order.status !== 'NEW' ||
+      order.price === null
+    ) {
+      continue;
+    }
+
+    if (order.side === 'BUY') {
+      const current =
+        reservedCash.get(order.accountId) ?? new Prisma.Decimal(0);
+      reservedCash.set(
+        order.accountId,
+        current.plus(new Prisma.Decimal(order.size).times(order.price)),
+      );
+    }
+
+    if (order.side === 'SELL') {
+      const positions = reservedShares.get(order.accountId) ?? new Map();
+      const current =
+        positions.get(order.instrumentId) ?? new Prisma.Decimal(0);
+      positions.set(order.instrumentId, current.plus(order.size));
+      reservedShares.set(order.accountId, positions);
+    }
+  }
+
+  for (const account of plan.accounts) {
+    await syncReservedCash(
+      tx,
+      account.id,
+      reservedCash.get(account.id) ?? new Prisma.Decimal(0),
+    );
+    await syncReservedShares(
+      tx,
+      account.id,
+      reservedShares.get(account.id) ?? new Map(),
+    );
+  }
+}
+
+async function syncReservedCash(
+  tx: SeedClient,
+  accountId: string,
+  expected: Prisma.Decimal,
+): Promise<void> {
+  const current = await readReservedCash(tx, accountId);
+
+  if (current.equals(expected)) {
+    return;
+  }
+
+  if (!current.isZero()) {
+    throw new DevelopmentSeedError(
+      `accounts ${accountId} reserved_cash is ${current.toString()}, expected ${expected.toString()}.`,
+    );
+  }
+
+  await tx.$executeRaw`
+    UPDATE accounts
+    SET reserved_cash = ${expected.toString()}::numeric
+    WHERE id = ${accountId}::uuid
+      AND reserved_cash = 0
+  `;
+  const stored = await readReservedCash(tx, accountId);
+
+  if (!stored.equals(expected)) {
+    throw new DevelopmentSeedError(
+      `accounts ${accountId} reserved_cash is ${stored.toString()}, expected ${expected.toString()}.`,
+    );
+  }
+}
+
+async function syncReservedShares(
+  tx: SeedClient,
+  accountId: string,
+  expected: ReadonlyMap<string, Prisma.Decimal>,
+): Promise<void> {
+  const current = await readReservedShares(tx, accountId);
+
+  if (sameShares(current, expected)) {
+    return;
+  }
+
+  if (current.size > 0) {
+    throw new DevelopmentSeedError(
+      `accounts ${accountId} reserved shares do not match the seeded orders.`,
+    );
+  }
+
+  for (const [instrumentId, quantity] of expected) {
+    await tx.$executeRaw`
+      INSERT INTO account_reserved_positions (account_id, instrument_id, quantity)
+      VALUES (
+        ${accountId}::uuid,
+        ${instrumentId}::uuid,
+        ${quantity.toString()}::numeric
+      )
+    `;
+  }
+
+  const stored = await readReservedShares(tx, accountId);
+
+  if (!sameShares(stored, expected)) {
+    throw new DevelopmentSeedError(
+      `accounts ${accountId} reserved shares do not match the seeded orders.`,
+    );
+  }
+}
+
+export async function assertAccountReservationsMatchOrders(
+  tx: SeedClient,
+  accountIds: readonly string[],
+): Promise<void> {
+  if (accountIds.length === 0) {
+    return;
+  }
+
+  const cash = await tx.$queryRaw<
+    Array<{ account_id: string; reserved_cash: string; expected_cash: string }>
+  >`
+    SELECT
+      account.id::text AS account_id,
+      account.reserved_cash::text AS reserved_cash,
+      COALESCE((
+        SELECT SUM(orders.size * orders.price)::text
+        FROM orders
+        WHERE orders.account_id = account.id
+          AND orders.side = 'BUY'
+          AND orders.type = 'LIMIT'
+          AND orders.status = 'NEW'
+      ), '0') AS expected_cash
+    FROM accounts AS account
+    WHERE account.id = ANY(${[...accountIds]}::uuid[])
+  `;
+  const storedShares = await tx.$queryRaw<
+    Array<{ account_id: string; instrument_id: string; quantity: string }>
+  >`
+    SELECT account_id::text, instrument_id::text, quantity::text
+    FROM account_reserved_positions
+    WHERE account_id = ANY(${[...accountIds]}::uuid[])
+  `;
+  const orderShares = await tx.$queryRaw<
+    Array<{ account_id: string; instrument_id: string; quantity: string }>
+  >`
+    SELECT account_id::text, instrument_id::text, SUM(size)::text AS quantity
+    FROM orders
+    WHERE account_id = ANY(${[...accountIds]}::uuid[])
+      AND side = 'SELL'
+      AND type = 'LIMIT'
+      AND status = 'NEW'
+    GROUP BY account_id, instrument_id
+  `;
+
+  for (const row of cash) {
+    if (!sameDecimal(row.reserved_cash, row.expected_cash)) {
+      throw new DevelopmentSeedError(
+        `accounts ${row.account_id} reserved_cash is ${row.reserved_cash}, expected ${row.expected_cash} from BUY LIMIT NEW orders.`,
+      );
+    }
+  }
+
+  if (shareKey(storedShares) !== shareKey(orderShares)) {
+    throw new DevelopmentSeedError(
+      'Reserved share positions do not match SELL LIMIT NEW orders.',
+    );
+  }
+}
+
+async function readReservedCash(
+  tx: SeedClient,
+  accountId: string,
+): Promise<Prisma.Decimal> {
+  const rows = await tx.$queryRaw<Array<{ reserved_cash: string }>>`
+    SELECT reserved_cash::text AS reserved_cash
+    FROM accounts
+    WHERE id = ${accountId}::uuid
+  `;
+  expectRow(rows[0], 'accounts', accountId);
+  return new Prisma.Decimal(rows[0].reserved_cash);
+}
+
+async function readReservedShares(
+  tx: SeedClient,
+  accountId: string,
+): Promise<Map<string, Prisma.Decimal>> {
+  const rows = await tx.$queryRaw<
+    Array<{ instrument_id: string; quantity: string }>
+  >`
+    SELECT instrument_id::text, quantity::text
+    FROM account_reserved_positions
+    WHERE account_id = ${accountId}::uuid
+  `;
+
+  return new Map(
+    rows.map((row) => [row.instrument_id, new Prisma.Decimal(row.quantity)]),
+  );
+}
+
+function sameShares(
+  actual: ReadonlyMap<string, Prisma.Decimal>,
+  expected: ReadonlyMap<string, Prisma.Decimal>,
+): boolean {
+  if (actual.size !== expected.size) {
+    return false;
+  }
+
+  for (const [instrumentId, quantity] of expected) {
+    const stored = actual.get(instrumentId);
+
+    if (!stored || !stored.equals(quantity)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function sameDecimal(actual: string, expected: string): boolean {
+  return new Prisma.Decimal(actual).equals(new Prisma.Decimal(expected));
+}
+
+function shareKey(
+  rows: readonly {
+    account_id: string;
+    instrument_id: string;
+    quantity: string;
+  }[],
+): string {
+  return rows
+    .map(
+      (row) =>
+        `${row.account_id}:${row.instrument_id}:${new Prisma.Decimal(row.quantity).toString()}`,
+    )
+    .sort()
+    .join('|');
 }
 
 function expectRow<T>(

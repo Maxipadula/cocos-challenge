@@ -10,6 +10,7 @@ import { UnitOfWork } from '#shared/application/unit-of-work.js';
 
 import { AccountNotFoundError } from '#orders/application/errors/account-not-found.error.js';
 import { AccountLock } from '#orders/application/ports/account-lock.js';
+import { AccountRepository } from '#orders/application/ports/account-repository.js';
 import { OrderRepository } from '#orders/application/ports/order-repository.js';
 import { type UserId, userId } from '#orders/application/types/user-id.js';
 import {
@@ -21,7 +22,9 @@ import {
   cancelTradeOrderResultFromJson,
   cancelTradeOrderResultToJson,
 } from '#orders/application/use-cases/cancel-trade-order.js';
+import { Account } from '#orders/domain/entities/account.js';
 import { TradeOrder } from '#orders/domain/entities/trade-order.js';
+import { ExcessReservationReleaseError } from '#orders/domain/errors/order-errors.js';
 import {
   accountId,
   type AccountId,
@@ -38,7 +41,14 @@ import {
   stock,
 } from '../../domain/order-fixture.js';
 
+type TransactionParticipant = {
+  commit(): void;
+  rollback(): void;
+};
+
 class RecordingUnitOfWork extends UnitOfWork {
+  readonly participants: TransactionParticipant[] = [];
+
   constructor(private readonly events: string[]) {
     super();
   }
@@ -50,7 +60,19 @@ class RecordingUnitOfWork extends UnitOfWork {
     this.active = true;
 
     try {
-      return await work();
+      const result = await work();
+
+      for (const participant of this.participants) {
+        participant.commit();
+      }
+
+      return result;
+    } catch (error) {
+      for (const participant of this.participants) {
+        participant.rollback();
+      }
+
+      throw error;
     } finally {
       this.active = false;
     }
@@ -59,8 +81,10 @@ class RecordingUnitOfWork extends UnitOfWork {
 
 class MemoryIdempotencyStore extends IdempotencyStore {
   readonly saved: NewIdempotencyRecord[] = [];
+  readonly committed: NewIdempotencyRecord[] = [];
   savedDuringTransaction = false;
   failOnSave = false;
+  private pending: NewIdempotencyRecord[] = [];
   private readonly scripted: Array<StoredIdempotency | null> = [];
 
   constructor(
@@ -88,16 +112,28 @@ class MemoryIdempotencyStore extends IdempotencyStore {
 
     this.savedDuringTransaction = this.unitOfWork.active;
     this.saved.push(record);
+    this.pending.push(record);
+  }
+
+  commit(): void {
+    this.committed.push(...this.pending);
+    this.pending = [];
+  }
+
+  rollback(): void {
+    this.pending = [];
   }
 }
 
 class MemoryOrders extends OrderRepository {
   readonly updated: TradeOrder[] = [];
+  readonly committed: TradeOrder[] = [];
   readonly lookups: Array<{ accountId: AccountId; orderId: OrderId }> = [];
   updatedDuringTransaction = false;
   found: TradeOrder | null = null;
   failOnFind = false;
   failOnUpdate = false;
+  private pending: TradeOrder[] = [];
 
   constructor(
     private readonly events: string[],
@@ -113,6 +149,10 @@ class MemoryOrders extends OrderRepository {
 
   override async add(): Promise<void> {
     throw new Error('CancelTradeOrder does not insert an order.');
+  }
+
+  override async addCashMovement(): Promise<void> {
+    throw new Error('CancelTradeOrder does not insert a cash movement.');
   }
 
   override async findTradeForUpdate(
@@ -148,6 +188,77 @@ class MemoryOrders extends OrderRepository {
 
     this.updatedDuringTransaction = this.unitOfWork.active;
     this.updated.push(order);
+    this.pending.push(order);
+  }
+
+  commit(): void {
+    const last = this.pending.at(-1);
+
+    if (last) {
+      this.trade = last;
+    }
+
+    this.committed.push(...this.pending);
+    this.pending = [];
+  }
+
+  rollback(): void {
+    this.pending = [];
+  }
+}
+
+class MemoryAccounts extends AccountRepository {
+  readonly saved: Account[] = [];
+  readonly committed: Account[] = [];
+  failOnSave = false;
+  missing = false;
+  private pending: Account[] = [];
+
+  constructor(
+    private readonly events: string[],
+    private current: Account,
+  ) {
+    super();
+  }
+
+  override async findById(id: AccountId): Promise<Account | null> {
+    this.events.push('accounts.find');
+
+    if (this.missing || id !== this.current.id) {
+      return null;
+    }
+
+    return this.current;
+  }
+
+  override async save(next: Account): Promise<void> {
+    this.events.push('accounts.save');
+
+    if (this.failOnSave) {
+      throw new Error('account save failed');
+    }
+
+    this.saved.push(next);
+    this.pending.push(next);
+  }
+
+  commit(): void {
+    const last = this.pending.at(-1);
+
+    if (last) {
+      this.current = last;
+    }
+
+    this.committed.push(...this.pending);
+    this.pending = [];
+  }
+
+  rollback(): void {
+    this.pending = [];
+  }
+
+  get state(): Account {
+    return this.current;
   }
 }
 
@@ -183,20 +294,43 @@ function openLimit(ownerAccount: AccountId = account): TradeOrder {
   });
 }
 
-function harness(trade: TradeOrder | null = openLimit()) {
+function harness(
+  trade: TradeOrder | null = openLimit(),
+  reserved: Account = initialReservation(trade),
+) {
   const events: string[] = [];
   const unitOfWork = new RecordingUnitOfWork(events);
   const idempotency = new MemoryIdempotencyStore(events, unitOfWork);
   const orders = new MemoryOrders(events, unitOfWork, trade);
+  const accounts = new MemoryAccounts(events, reserved);
   const accountLock = new MemoryAccountLock(events, unitOfWork);
+  unitOfWork.participants.push(idempotency, orders, accounts);
   const useCase = new CancelTradeOrder(
     idempotency,
     unitOfWork,
     accountLock,
     orders,
+    accounts,
   );
 
-  return { events, idempotency, orders, accountLock, useCase };
+  return { events, idempotency, orders, accounts, accountLock, useCase };
+}
+
+function initialReservation(trade: TradeOrder | null): Account {
+  if (
+    !trade ||
+    trade.accountId !== account ||
+    trade.type !== 'LIMIT' ||
+    trade.status !== 'NEW'
+  ) {
+    return Account.open(account);
+  }
+
+  if (trade.side === 'BUY') {
+    return Account.open(account).reserveCash(trade.price.multiply(trade.size));
+  }
+
+  return Account.open(account).reserveShares(trade.instrumentId, trade.size);
 }
 
 function command(
@@ -237,7 +371,8 @@ const cancelledResult: CancelTradeOrderResult = {
 describe('CancelTradeOrder', () => {
   it('replays the first read without opening a transaction', async () => {
     const original = openLimit();
-    const { events, idempotency, orders, useCase } = harness(original);
+    const { events, idempotency, orders, accounts, useCase } =
+      harness(original);
     const request = command(original.id);
     idempotency.script(
       remembered(cancelledResult, cancelTradeOrderRequestHash(request)),
@@ -249,6 +384,7 @@ describe('CancelTradeOrder', () => {
     expect(events).not.toContain('transaction');
     expect(orders.lookups).toEqual([]);
     expect(orders.updated).toEqual([]);
+    expect(accounts.saved).toEqual([]);
     expect(idempotency.saved).toEqual([]);
   });
 
@@ -330,7 +466,8 @@ describe('CancelTradeOrder', () => {
 
   it('cancels a new limit order and persists the instance returned by cancel', async () => {
     const original = openLimit();
-    const { events, idempotency, orders, useCase } = harness(original);
+    const { accounts, events, idempotency, orders, useCase } =
+      harness(original);
     const request = command(original.id);
 
     const result = await useCase.execute(request);
@@ -371,9 +508,13 @@ describe('CancelTradeOrder', () => {
       'lock',
       'idempotency.find',
       'orders.findTradeForUpdate',
+      'accounts.find',
       'orders.update',
+      'accounts.save',
       'idempotency.save',
     ]);
+    expect(accounts.state.reservedCash.isZero()).toBe(true);
+    expect(accounts.committed).toHaveLength(1);
   });
 
   it('returns NOT_FOUND when the order does not exist and stores that result', async () => {
@@ -494,7 +635,9 @@ describe('CancelTradeOrder', () => {
     const lock = events.indexOf('lock');
     const secondFind = events.indexOf('idempotency.find', firstFind + 1);
     const lookup = events.indexOf('orders.findTradeForUpdate');
+    const accountRead = events.indexOf('accounts.find');
     const update = events.indexOf('orders.update');
+    const accountSave = events.indexOf('accounts.save');
     const save = events.indexOf('idempotency.save');
 
     expect(firstFind).toBeLessThan(transaction);
@@ -502,8 +645,10 @@ describe('CancelTradeOrder', () => {
     expect(accountLock.acquiredDuringTransaction).toBe(true);
     expect(lock).toBeLessThan(secondFind);
     expect(secondFind).toBeLessThan(lookup);
-    expect(lookup).toBeLessThan(update);
-    expect(update).toBeLessThan(save);
+    expect(lookup).toBeLessThan(accountRead);
+    expect(accountRead).toBeLessThan(update);
+    expect(update).toBeLessThan(accountSave);
+    expect(accountSave).toBeLessThan(save);
   });
 
   it('propagates a lookup failure without storing idempotency or updating', async () => {
@@ -534,7 +679,7 @@ describe('CancelTradeOrder', () => {
 
   it('propagates an idempotency save failure after the cancelled order was staged', async () => {
     const original = openLimit();
-    const { idempotency, orders, useCase } = harness(original);
+    const { accounts, idempotency, orders, useCase } = harness(original);
     idempotency.failOnSave = true;
 
     await expect(useCase.execute(command(original.id))).rejects.toThrow(
@@ -543,7 +688,71 @@ describe('CancelTradeOrder', () => {
     expect(orders.updated).toHaveLength(1);
     expect(orders.updated[0]).not.toBe(original);
     expect(orders.updated[0]?.status).toBe('CANCELLED');
+    expect(orders.committed).toHaveLength(0);
+    expect(accounts.committed).toHaveLength(0);
     expect(original.status).toBe('NEW');
     expect(idempotency.saved).toEqual([]);
+    expect(idempotency.committed).toHaveLength(0);
+  });
+
+  it('releases the cash reserved by a buy limit', async () => {
+    const original = openLimit();
+    const { accounts, useCase } = harness(original);
+
+    await expect(useCase.execute(command(original.id))).resolves.toMatchObject({
+      outcome: 'CANCELLED',
+    });
+    expect(accounts.state.reservedCash.isZero()).toBe(true);
+  });
+
+  it('releases the shares reserved by a sell limit', async () => {
+    const original = TradeOrder.limitOpen({
+      ...identity(4, 4n),
+      side: 'SELL',
+      price: price('12.50'),
+    });
+    const { accounts, useCase } = harness(original);
+
+    await expect(useCase.execute(command(original.id))).resolves.toMatchObject({
+      outcome: 'CANCELLED',
+    });
+    expect(accounts.state.reservedSharesOf(stock)).toBe(0n);
+    expect(accounts.committed).toHaveLength(1);
+  });
+
+  it('does not release a reservation twice', async () => {
+    const original = openLimit();
+    const { accounts, useCase } = harness(original);
+
+    await useCase.execute(command(original.id, 'first-key'));
+    await expect(
+      useCase.execute(command(original.id, 'second-key')),
+    ).resolves.toEqual({ outcome: 'NOT_CANCELLABLE' });
+    expect(accounts.committed).toHaveLength(1);
+    expect(accounts.state.reservedCash.isZero()).toBe(true);
+  });
+
+  it('rolls back the cancellation when the reservation cannot be released', async () => {
+    const original = openLimit();
+    const missingReserve = harness(original, Account.open(account));
+
+    await expect(
+      missingReserve.useCase.execute(command(original.id)),
+    ).rejects.toBeInstanceOf(ExcessReservationReleaseError);
+    expect(missingReserve.orders.updated).toHaveLength(0);
+    expect(missingReserve.orders.committed).toHaveLength(0);
+    expect(missingReserve.idempotency.committed).toHaveLength(0);
+    expect(original.status).toBe('NEW');
+
+    const failedSave = harness(original);
+    failedSave.accounts.failOnSave = true;
+    await expect(
+      failedSave.useCase.execute(command(original.id, 'save-fails')),
+    ).rejects.toThrow('account save failed');
+    expect(failedSave.orders.updated).toHaveLength(1);
+    expect(failedSave.orders.committed).toHaveLength(0);
+    expect(failedSave.accounts.committed).toHaveLength(0);
+    expect(failedSave.idempotency.committed).toHaveLength(0);
+    expect(original.status).toBe('NEW');
   });
 });

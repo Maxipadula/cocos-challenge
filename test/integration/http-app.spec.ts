@@ -76,6 +76,9 @@ describeWithLocalDatabase('HTTP application against PostgreSQL', () => {
     await prisma.idempotencyRecord.deleteMany({
       where: { userId: { in: owned.users } },
     });
+    await prisma.accountReservedPosition.deleteMany({
+      where: { accountId: { in: owned.accounts } },
+    });
     await prisma.order.deleteMany({
       where: { accountId: { in: owned.accounts } },
     });
@@ -154,6 +157,7 @@ describeWithLocalDatabase('HTTP application against PostgreSQL', () => {
     expect(response.status).toBe(200);
     expect(response.body.accountId).toBe(trader.accountId);
     expect(sameMoney(response.body.settledCash, '5000')).toBe(true);
+    expect(sameMoney(response.body.reservedCash, '0')).toBe(true);
     expect(sameMoney(response.body.availableCash, '5000')).toBe(true);
     expect(sameMoney(response.body.totalValue, '5000')).toBe(true);
     expect(response.body.positions).toEqual([]);

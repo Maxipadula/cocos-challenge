@@ -14,14 +14,18 @@ import {
 } from '#shared/application/json.js';
 import type { UnitOfWork } from '#shared/application/unit-of-work.js';
 
+import { type Account } from '../../domain/entities/account.js';
 import type {
   TradeOrder,
   TradeSide,
 } from '../../domain/entities/trade-order.js';
 import { OrderNotCancellableError } from '../../domain/errors/order-errors.js';
+import type { AccountId } from '../../domain/value-objects/account-id.js';
 import type { OrderId } from '../../domain/value-objects/order-id.js';
 import { ShareQuantity } from '../../domain/value-objects/share-quantity.js';
+import { AccountNotFoundError } from '../errors/account-not-found.error.js';
 import type { AccountLock } from '../ports/account-lock.js';
+import type { AccountRepository } from '../ports/account-repository.js';
 import type { OrderRepository } from '../ports/order-repository.js';
 import type { UserId } from '../types/user-id.js';
 
@@ -65,6 +69,7 @@ export class CancelTradeOrder {
     private readonly unitOfWork: UnitOfWork,
     private readonly accountLock: AccountLock,
     private readonly orders: OrderRepository,
+    private readonly accounts: AccountRepository,
   ) {}
 
   async execute(
@@ -103,7 +108,7 @@ export class CancelTradeOrder {
       accountId,
       command.orderId,
     );
-    const result = await this.applyCancellation(current);
+    const result = await this.applyCancellation(accountId, current);
 
     await this.idempotency.save({
       userId: command.userId,
@@ -117,6 +122,7 @@ export class CancelTradeOrder {
   }
 
   private async applyCancellation(
+    accountId: AccountId,
     current: TradeOrder | null,
   ): Promise<CancelTradeOrderResult> {
     if (!current) {
@@ -129,9 +135,25 @@ export class CancelTradeOrder {
       return { outcome: 'NOT_CANCELLABLE' };
     }
 
+    const account = await this.accounts.findById(accountId);
+
+    if (!account) {
+      throw new AccountNotFoundError();
+    }
+
+    const released = releaseReservation(account, current);
     await this.orders.update(cancelled);
+    await this.accounts.save(released);
     return { outcome: 'CANCELLED', order: toCancelledTradeOrder(cancelled) };
   }
+}
+
+function releaseReservation(account: Account, order: TradeOrder): Account {
+  if (order.side === 'BUY') {
+    return account.releaseCash(order.price.multiply(order.size));
+  }
+
+  return account.releaseShares(order.instrumentId, order.size);
 }
 
 function cancelIfAllowed(order: TradeOrder): TradeOrder | 'NOT_CANCELLABLE' {

@@ -1,3 +1,4 @@
+import type { CashMovement } from '../../domain/entities/cash-movement.js';
 import type { TradeOrder } from '../../domain/entities/trade-order.js';
 import type { AccountEntry } from '../../domain/services/availability.js';
 import type { AccountId } from '../../domain/value-objects/account-id.js';
@@ -14,6 +15,8 @@ export abstract class OrderRepository {
   ): Promise<TradeOrder | null>;
 
   abstract add(order: TradeOrder): Promise<void>;
+
+  abstract addCashMovement(movement: CashMovement): Promise<void>;
 
   abstract update(order: TradeOrder): Promise<void>;
 }

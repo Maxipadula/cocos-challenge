@@ -46,6 +46,22 @@ export class PrismaInstrumentQueries extends InstrumentQueries {
     return toInstrumentInfo(row);
   }
 
+  override async findByTicker(ticker: string): Promise<InstrumentInfo | null> {
+    const rows = await this.clients.getClient().$queryRaw<InstrumentRow[]>`
+      SELECT id, ticker, name, type
+      FROM instruments
+      WHERE ticker = ${ticker}
+      LIMIT 1
+    `;
+    const row = rows[0];
+
+    if (!row) {
+      return null;
+    }
+
+    return toInstrumentInfo(row);
+  }
+
   override async search(
     term: string,
     limit = 20,
