@@ -137,7 +137,7 @@ PostgreSQL local está descrito en `docker-compose.yml`: imagen oficial `postgre
 
 Desarrollo local, sin pasar por el esquema original:
 
-- `npm run db:up` levanta PostgreSQL.
+- `npm run db:up` levanta PostgreSQL, espera el healthcheck, aplica las migraciones y carga la fixture si `users` está vacía. Exige un host local. Si ya hay usuarios, no vuelve a sembrar.
 - `npm run db:down` lo detiene y conserva el volumen.
 - `npm run db:migrate` aplica las migraciones versionadas con `prisma migrate deploy`.
 - `npm run db:migrate:status` consulta el estado de esas migraciones.

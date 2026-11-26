@@ -47,7 +47,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretypecheck": "prisma generate",
     "prisma:generate": "prisma generate",
-    "db:up": "docker compose up -d",
+    "db:up": "node scripts/db-up.mjs",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",

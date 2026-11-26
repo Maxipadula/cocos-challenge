@@ -8,12 +8,10 @@ La base `cocos` nace con `prisma/migrations/20261126054100_init`. Ese archivo no
 
 ```bash
 npm run db:up
-npm run db:migrate
-npm run db:seed
 npm run test:integration
 ```
 
-`db:seed` exige `SEED_DEV=1` y un host local. El script de npm ya define esa variable. No usa `prisma db push`.
+`db:up` levanta Postgres, aplica las migraciones y carga la fixture si la base local todavía no tiene usuarios. Exige un host local. No usa `prisma db push`.
 
 ## B. Base remota que ya tiene el esquema original
 
