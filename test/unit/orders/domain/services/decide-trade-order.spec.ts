@@ -13,6 +13,7 @@ import {
 } from '../../../../../src/orders/domain/services/availability.js';
 import { decideTradeOrder } from '../../../../../src/orders/domain/services/decide-trade-order.js';
 import {
+  fixtureUuid,
   identity,
   owner,
   peso,
@@ -27,7 +28,7 @@ const deposit = CashMovement.cashIn({
   amount: Money.parse('100.00'),
 });
 const position = decideTradeOrder([deposit], {
-  id: orderId(2),
+  id: orderId(fixtureUuid(2)),
   userId: owner,
   instrumentId: stock,
   side: 'BUY',
@@ -49,7 +50,7 @@ describe('decideTradeOrder', () => {
         }),
       ],
       {
-        id: orderId(8),
+        id: orderId(fixtureUuid(8)),
         userId: owner,
         instrumentId: stock,
         side: 'BUY',
@@ -75,7 +76,7 @@ describe('decideTradeOrder', () => {
         }),
       ],
       {
-        id: orderId(9),
+        id: orderId(fixtureUuid(9)),
         userId: owner,
         instrumentId: stock,
         side: 'BUY',
@@ -111,7 +112,7 @@ describe('decideTradeOrder', () => {
         }),
       ],
       {
-        id: orderId(10),
+        id: orderId(fixtureUuid(10)),
         userId: owner,
         instrumentId: stock,
         side: 'BUY',
@@ -139,7 +140,7 @@ describe('decideTradeOrder', () => {
 
   it('opens a limit sell when the shares are available and rejects when they are not', () => {
     const accepted = decideTradeOrder(funded, {
-      id: orderId(11),
+      id: orderId(fixtureUuid(11)),
       userId: owner,
       instrumentId: stock,
       side: 'SELL',
@@ -149,7 +150,7 @@ describe('decideTradeOrder', () => {
       placedAt,
     });
     const rejected = decideTradeOrder([...funded, accepted], {
-      id: orderId(12),
+      id: orderId(fixtureUuid(12)),
       userId: owner,
       instrumentId: stock,
       side: 'SELL',
@@ -179,7 +180,7 @@ describe('decideTradeOrder', () => {
 
     expect(() =>
       decideTradeOrder(cash, {
-        id: orderId(13),
+        id: orderId(fixtureUuid(13)),
         userId: owner,
         instrumentId: stock,
         side: 'BUY',
@@ -192,7 +193,7 @@ describe('decideTradeOrder', () => {
 
     expect(() =>
       decideTradeOrder(cash, {
-        id: orderId(14),
+        id: orderId(fixtureUuid(14)),
         userId: owner,
         instrumentId: stock,
         side: 'SELL',

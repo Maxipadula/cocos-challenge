@@ -36,7 +36,7 @@ export class InvalidOrderTimestampError extends Error {
 }
 
 export class InvalidOrderIdError extends Error {
-  constructor(message = 'Order id must be a positive safe integer.') {
+  constructor(message = 'Order id must be a UUID.') {
     super(message);
     this.name = 'InvalidOrderIdError';
   }

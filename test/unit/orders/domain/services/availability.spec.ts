@@ -7,7 +7,7 @@ import {
   availableShares,
 } from '../../../../../src/orders/domain/services/availability.js';
 import { instrumentId } from '../../../../../src/shared/domain/value-objects/ids.js';
-import { identity, peso, price, stock } from '../order-fixture.js';
+import { fixtureUuid, identity, peso, price, stock } from '../order-fixture.js';
 
 describe('availability', () => {
   it('starts at zero when there are no orders', () => {
@@ -49,7 +49,7 @@ describe('availability', () => {
   });
 
   it('derives shares from filled trades minus new limit sells', () => {
-    const other = instrumentId(99);
+    const other = instrumentId(fixtureUuid(99));
     const entries = [
       TradeOrder.marketFilled({
         ...identity(1, 10n),

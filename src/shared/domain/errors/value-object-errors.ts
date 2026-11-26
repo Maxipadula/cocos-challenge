@@ -20,7 +20,7 @@ export class InvalidShareQuantityError extends Error {
 }
 
 export class InvalidIdError extends Error {
-  constructor(message = 'Identifier must be a positive safe integer.') {
+  constructor(message = 'Identifier must be a UUID.') {
     super(message);
     this.name = 'InvalidIdError';
   }
