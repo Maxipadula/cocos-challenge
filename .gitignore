@@ -3,6 +3,7 @@
 /node_modules
 /build
 /tmp
+*.tsbuildinfo
 
 # Logs
 logs
@@ -22,3 +23,11 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Generated Prisma Client
+/src/generated
+
+# Test coverage
+/coverage
+
+consigna.md

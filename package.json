@@ -1,0 +1,55 @@
+{
+  "name": "cocos-challenge",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "build": "nest build",
+    "prebuild": "prisma generate",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"prisma.config.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"prisma.config.ts\"",
+    "lint:fix": "eslint --fix \"src/**/*.ts\" \"test/**/*.ts\" \"prisma.config.ts\"",
+    "test": "npm run test:unit && npm run test:integration && npm run test:functional",
+    "pretest": "prisma generate",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:functional": "vitest run --config vitest.config.functional.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pretypecheck": "prisma generate",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.6.2",
+    "@nestjs/core": "12.6.2",
+    "@nestjs/platform-express": "12.6.2",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "16.6.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@nestjs/cli": "12.0.15",
+    "@nestjs/schematics": "12.0.16",
+    "@nestjs/testing": "12.6.2",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.11",
+    "eslint": "10.15.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.10.1",
+    "prisma": "7.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.74.0",
+    "vite": "8.3.8",
+    "vitest": "4.1.12"
+  }
+}
