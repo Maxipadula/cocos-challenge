@@ -6,9 +6,11 @@ import { OrdersPortfolioDataProvider } from '#orders/application/orders-portfoli
 import { OrdersModule } from '#orders/orders.module.js';
 
 import { GetPortfolio } from './application/use-cases/get-portfolio.js';
+import { PortfolioController } from './presentation/portfolio.controller.js';
 
 @Module({
   imports: [OrdersModule, InstrumentsModule],
+  controllers: [PortfolioController],
   providers: [
     {
       provide: GetPortfolio,
